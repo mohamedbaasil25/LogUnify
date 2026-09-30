@@ -1,0 +1,30 @@
+# Splunk HTTP Event Collector (index + retention in ../../splunk/indexes.conf).
+sinks:
+  splunk_hec:
+    type: splunk_hec_logs
+    inputs: [to_splunk]
+    endpoint: "${SPLUNK_HEC_URL:-https://localhost:8088}"
+    default_token: "SECRET[fwd.splunk_hec_token]"          # from the secret backend, never in this file
+    index: logunify
+    sourcetype: "logunify:ecs"
+    source: logunify-forwarder
+    host_key: host.name                                   # HEC metadata `host`; the ECS field also stays in the payload
+    timestamp_key: splunk_time                            # HEC metadata `time` = event time (helper copy of @timestamp, see 00-common.yaml)
+    indexed_fields: [event.dataset, event.kind]           # cheap index-time fields; everything else is search-time JSON
+    encoding:
+      codec: json
+    compression: gzip
+    acknowledgements:
+      indexer_acknowledgements_enabled: true              # delivery is only "done" once the indexer has persisted it
+      query_interval: 10
+      retry_limit: 30
+    tls:
+      verify_certificate: true
+      verify_hostname: true
+    batch:
+      max_bytes: 1000000
+      timeout_secs: 2
+    buffer:
+      type: disk
+      max_size: 10737418240                            # bytes; size = outage hours x EPS x ~1.3 x doc size (retention/capacity.py --eps N --outage-hours H; docs/WORKFLOW.md)
+      when_full: block

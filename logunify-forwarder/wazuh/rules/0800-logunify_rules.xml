@@ -1,0 +1,41 @@
+<!-- /var/ossec/etc/rules/0800-logunify_rules.xml   (custom rule ids 100100-100199 are reserved for LogUnify)
+     Events arrive as JSON (localfile log_format json). Nested ECS keys are flat field names here, e.g.
+     threat.indicator.provider, logunify.anomaly.score. -->
+<group name="logunify,ecs,">
+
+  <rule id="100100" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="ecs.version">\.+</field>
+    <description>LogUnify: ECS event received.</description>
+  </rule>
+
+  <rule id="100110" level="12">
+    <if_sid>100100</if_sid>
+    <field name="threat.indicator.provider">\.+</field>
+    <description>LogUnify: log matched a threat-intelligence indicator ($(threat.indicator.type) via $(threat.indicator.provider)).</description>
+    <group>threat_intel,</group>
+  </rule>
+
+  <rule id="100120" level="10">
+    <if_sid>100100</if_sid>
+    <field name="logunify.anomaly.score" type="pcre2">^(0\.[89]\d*|1(\.0+)?)$</field>
+    <description>LogUnify: high anomaly score ($(logunify.anomaly.score)).</description>
+    <group>anomaly,</group>
+  </rule>
+
+  <rule id="100121" level="12">
+    <if_sid>100120</if_sid>
+    <field name="logunify.anomaly.score" type="pcre2">^(0\.9\d*|1(\.0+)?)$</field>
+    <description>LogUnify: critical anomaly score ($(logunify.anomaly.score)).</description>
+    <group>anomaly,</group>
+  </rule>
+
+  <rule id="100130" level="8">
+    <if_sid>100100</if_sid>
+    <field name="event.outcome">^failure$</field>
+    <field name="event.category">^authentication$</field>
+    <description>LogUnify: authentication failure from $(source.ip).</description>
+    <group>authentication_failed,</group>
+  </rule>
+
+</group>

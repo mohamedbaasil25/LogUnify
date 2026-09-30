@@ -1,0 +1,26 @@
+# OPTIONAL alternative to 30-sink-wazuh-file.yaml: RFC 3164 syslog over TCP to the Wazuh manager.
+# Rename to .yaml to enable (and remove the file sink so events aren't delivered twice).
+# Security: Wazuh's syslog listener has NO TLS or authentication. Only use it inside a private segment and
+# restrict the sender with <allowed-ips> in the manager's <remote> block (see ../../wazuh/ossec-manager-snippet.xml).
+transforms:
+  to_wazuh_syslog:
+    type: remap
+    inputs: [ecs_prepare]
+    source: |
+      ts = format_timestamp!(now(), "%b %e %H:%M:%S")
+      .line = "<134>" + ts + " logunify-fwd logunify: " + encode_json(.)
+
+sinks:
+  wazuh_syslog:
+    type: socket
+    inputs: [to_wazuh_syslog]
+    mode: tcp
+    address: "${WAZUH_SYSLOG_ADDR:-127.0.0.1:514}"
+    encoding:
+      codec: text
+    framing:
+      method: newline_delimited
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block

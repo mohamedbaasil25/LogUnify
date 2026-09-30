@@ -1,0 +1,12 @@
+{
+  "type": "s3",
+  "settings": {
+    "bucket": "REPLACE-logunify-archive-mumbai",
+    "region": "ap-south-1",
+    "base_path": "elasticsearch/logunify",
+    "server_side_encryption": true,
+    "storage_class": "standard_ia",
+    "max_snapshot_bytes_per_sec": "200mb",
+    "readonly": false
+  }
+}

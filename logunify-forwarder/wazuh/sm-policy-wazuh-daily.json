@@ -1,0 +1,14 @@
+{
+  "description": "Daily snapshot of Wazuh indices to the WORM archive repository. ISM has no wait-for-snapshot step, so keep this policy healthy and alert on failures.",
+  "creation": { "schedule": { "cron": { "expression": "0 20 * * *", "timezone": "UTC" } } },
+  "deletion": {
+    "schedule": { "cron": { "expression": "0 21 * * *", "timezone": "UTC" } },
+    "condition": { "max_age": "190d", "min_count": 7 }
+  },
+  "snapshot_config": {
+    "repository": "logunify-archive",
+    "indices": "wazuh-*",
+    "include_global_state": false,
+    "ignore_unavailable": true
+  }
+}

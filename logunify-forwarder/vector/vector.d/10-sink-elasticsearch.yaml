@@ -1,0 +1,30 @@
+# Elasticsearch: data stream `logs-logunify-<env>` (template + ILM in ../../elasticsearch).
+sinks:
+  elasticsearch:
+    type: elasticsearch
+    inputs: [to_elasticsearch]
+    endpoints: ["${ES_URL:-https://localhost:9200}"]
+    api_version: v8
+    mode: data_stream
+    data_stream:
+      type: logs
+      dataset: logunify
+      namespace: "${LOGUNIFY_ENV:-prod}"
+      auto_routing: false                                 # always this data stream, whatever the event says
+    bulk:
+      action: create                                      # required for data streams (append-only)
+    id_key: es_id                                         # -> _id = Kafka topic:partition:offset, so retries can't duplicate
+    compression: gzip
+    request:
+      headers:
+        Authorization: "SECRET[fwd.es_authorization]"        # "ApiKey <base64>" from the secret backend, never in this file
+    tls:
+      verify_certificate: true                            # private CA: set ca_file via the environment-specific override
+      verify_hostname: true
+    batch:
+      max_bytes: 5000000
+      timeout_secs: 2
+    buffer:                                               # per-destination durability: survives restarts and outages
+      type: disk
+      max_size: 10737418240                            # bytes; size = outage hours x EPS x ~1.3 x doc size (retention/capacity.py --eps N --outage-hours H; docs/WORKFLOW.md)
+      when_full: block                                    # never drop: apply backpressure to Kafka (which retains)

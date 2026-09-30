@@ -1,0 +1,14 @@
+{
+  "schedule": "0 30 20 * * ?",
+  "name": "<logunify-{now/d}>",
+  "repository": "logunify-archive",
+  "config": {
+    "indices": ["logs-logunify-*"],
+    "include_global_state": false
+  },
+  "retention": {
+    "expire_after": "190d",
+    "min_count": 7,
+    "max_count": 250
+  }
+}

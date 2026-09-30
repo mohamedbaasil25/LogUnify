@@ -1,0 +1,21 @@
+<!-- Add to /var/ossec/etc/ossec.conf on the Wazuh MANAGER. -->
+<ossec_config>
+  <global>
+    <!-- CERT-In wants logs retained, not just alerts. Alerts only cover events that match a rule; the archive holds every
+         event received. Ship archives to the indexer too (Filebeat: wazuh.archives.enabled: true) so both are
+         covered by the 180-day ISM policy (ism-policy-wazuh-cert-in.json). -->
+    <logall_json>yes</logall_json>
+    <alerts_log>yes</alerts_log>
+  </global>
+
+  <!-- OPTIONAL: syslog intake, only if you use vector/vector.d/35-sink-wazuh-syslog.yaml.example.
+       Wazuh's syslog listener has no TLS and no authentication: private segment only, sender pinned by IP. -->
+  <!--
+  <remote>
+    <connection>syslog</connection>
+    <port>514</port>
+    <protocol>tcp</protocol>
+    <allowed-ips>10.20.30.40/32</allowed-ips>
+  </remote>
+  -->
+</ossec_config>

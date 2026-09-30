@@ -1,0 +1,4 @@
+apache-flink==1.20.1     # needs Java 11/17 and Python 3.8-3.11
+zstandard>=0.22
+confluent-kafka>=2.3  # scripts + e2e test only
+pytest>=8.0

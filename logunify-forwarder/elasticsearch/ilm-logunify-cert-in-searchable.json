@@ -1,0 +1,46 @@
+{
+  "policy": {
+    "_meta": {
+      "description": "Enterprise-license variant: cold = searchable snapshot (fully mounted, local cache), frozen = partially mounted from object storage. Cheapest way to keep 180 days searchable.",
+      "regulation": "CERT-In Directions No. 20(3)/2022-CERT-In (28 Apr 2022): keep ICT logs for a rolling 180 days, within Indian jurisdiction",
+      "retention_days": 180,
+      "age_reference": "phase min_age counts from ROLLOVER",
+      "requires": "Enterprise license + snapshot repository logunify-archive in an Indian region"
+    },
+    "phases": {
+      "hot": {
+        "actions": {
+          "rollover": { "max_age": "1d", "max_primary_shard_size": "50gb" },
+          "set_priority": { "priority": 100 }
+        }
+      },
+      "warm": {
+        "min_age": "7d",
+        "actions": {
+          "set_priority": { "priority": 50 },
+          "readonly": {},
+          "forcemerge": { "max_num_segments": 1, "index_codec": "best_compression" }
+        }
+      },
+      "cold": {
+        "min_age": "30d",
+        "actions": {
+          "set_priority": { "priority": 0 },
+          "searchable_snapshot": { "snapshot_repository": "logunify-archive", "force_merge_index": true }
+        }
+      },
+      "frozen": {
+        "min_age": "90d",
+        "actions": {
+          "searchable_snapshot": { "snapshot_repository": "logunify-archive" }
+        }
+      },
+      "delete": {
+        "min_age": "180d",
+        "actions": {
+          "delete": { "delete_searchable_snapshot": true }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "logunify-forwarder",
+  "expiration": "90d",
+  "role_descriptors": {
+    "logunify_forwarder": {
+      "cluster": ["monitor"],
+      "indices": [{ "names": ["logs-logunify-*"], "privileges": ["create_doc"] }]
+    }
+  },
+  "metadata": { "rotate_before": "90d", "owner": "security-platform" }
+}

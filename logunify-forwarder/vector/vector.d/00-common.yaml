@@ -1,0 +1,81 @@
+# LogUnify forwarder: shared source + transforms.
+# Reads ECS documents that the LogUnify backend publishes to Kafka (`logunify.ecs`) and prepares them for delivery.
+# Destinations live in 10-*/20-*/30-* files. Run them all in one process, or one process per destination
+# (`vector -c 00-common.yaml -c 20-sink-splunk-hec.yaml`, each with its own FORWARDER_GROUP) so a slow
+# destination cannot stall the others (see docs/WORKFLOW.md).
+#
+# Non-secret settings use VAR:-default style. Vector >= 0.5x only expands them when started with
+# --dangerously-allow-env-var-interpolation (or VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true).
+
+data_dir: '${VECTOR_DATA_DIR:-/var/lib/vector}'          # disk buffers live here: size the volume for the outage window
+
+# A Kafka offset is committed only after every sink has durably accepted the event (its disk buffer or the
+# destination). Nothing acknowledged is lost on restart; on failure events are re-delivered (at-least-once).
+acknowledgements:
+  enabled: true
+
+# Secrets are NEVER read from environment variables or written in these files. Vector resolves SECRET[fwd.<name>]
+# at start-up from files in this directory (mount a Kubernetes/Docker secret here). Alternatives: type
+# aws_secrets_manager (ap-south-1), or exec (HashiCorp Vault agent). Needed names: es_authorization
+# ("ApiKey <base64>"), splunk_hec_token.
+secret:
+  fwd:
+    type: directory
+    path: '${SECRETS_DIR:-/run/secrets}'
+
+api:                                                      # local health/metrics endpoint: `vector top`, /health
+  enabled: true
+  address: '${VECTOR_API_ADDR:-127.0.0.1:8686}'
+
+sources:
+  ecs_in:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BOOTSTRAP:-localhost:9092}"
+    topics: ["${ECS_TOPIC:-logunify.ecs}"]
+    group_id: "${FORWARDER_GROUP:-logunify-forwarder}"
+    auto_offset_reset: earliest
+    decoding:
+      codec: bytes                                        # parse in VRL so malformed payloads can go to the DLQ, not vanish
+    commit_interval_ms: 5000
+    librdkafka_options:
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"     # SASL_SSL in production
+      broker.address.family: "${KAFKA_ADDRESS_FAMILY:-any}"
+
+transforms:
+  ecs_prepare:
+    type: remap
+    inputs: [ecs_in]
+    drop_on_error: true                                   # payload isn't a JSON object -> abort ...
+    reroute_dropped: true                                 # ... and route the ORIGINAL event to `ecs_prepare.dropped` (DLQ)
+    source: |
+      topic = string!(.topic)
+      partition = to_string!(.partition)
+      offset = to_string!(.offset)
+      . = object!(parse_json!(string!(.message)))
+
+      if !is_object(.event) { .event = {} }
+      # Deterministic id per Kafka record: retries and replays produce the same id (used as ES _id and for query-time dedupe).
+      if !exists(.event.id) { .event.id = topic + ":" + partition + ":" + offset }
+
+      # ECS requires @timestamp as a real timestamp; fall back to ingest time rather than losing the event.
+      ."@timestamp" = if is_string(."@timestamp") { parse_timestamp(."@timestamp", "%+") ?? now() } else { now() }
+
+      if !is_object(.labels) { .labels = {} }
+      .labels.forwarder = "vector"
+      .labels.env = get_env_var("LOGUNIFY_ENV") ?? "prod"
+
+  # Elasticsearch's `id_key` MOVES the field out of the document, so the real event.id is copied to a helper key
+  # (es_id) that is consumed as _id while event.id stays in the stored ECS document.
+  to_elasticsearch:
+    type: remap
+    inputs: [ecs_prepare]
+    source: |
+      .es_id = .event.id
+
+  # Splunk HEC: `host_key` copies host.name, but `timestamp_key` MOVES its field out of the payload. Copy @timestamp to
+  # a helper key so HEC still gets event time (`time`) and the stored ECS document keeps @timestamp.
+  to_splunk:
+    type: remap
+    inputs: [ecs_prepare]
+    source: |
+      .splunk_time = ."@timestamp"

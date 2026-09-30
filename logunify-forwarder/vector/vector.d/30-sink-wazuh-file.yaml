@@ -1,0 +1,16 @@
+# Wazuh: write NDJSON to a file that a Wazuh agent tails (localfile, log_format json).
+# Why not syslog? Wazuh's syslog listener is plaintext and unauthenticated; the agent channel (TCP 1514) is
+# authenticated + encrypted and the agent buffers if the manager is down. Rotate by date; delete files after 2 days
+# (`find the WAZUH_LOG_DIR directory -name 'ecs-*.json' -mtime +2 -delete`): retention lives in the Wazuh indexer, not here.
+sinks:
+  wazuh_file:
+    type: file
+    inputs: [ecs_prepare]
+    path: '${WAZUH_LOG_DIR:-/var/log/logunify}/ecs-%Y-%m-%d.json'
+    encoding:
+      codec: json
+    idle_timeout_secs: 60
+    buffer:
+      type: disk
+      max_size: 10737418240                            # bytes; size = outage hours x EPS x ~1.3 x doc size (retention/capacity.py --eps N --outage-hours H; docs/WORKFLOW.md)
+      when_full: block

@@ -1,0 +1,7 @@
+{
+  "cluster": ["monitor"],
+  "indices": [
+    { "names": ["logs-logunify-*"], "privileges": ["create_doc"] }
+  ],
+  "metadata": { "purpose": "Vector forwarder: append-only, cannot read, update or delete anything" }
+}

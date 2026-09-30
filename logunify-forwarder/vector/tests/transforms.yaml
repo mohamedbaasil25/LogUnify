@@ -1,0 +1,119 @@
+# Run: vector test vector/vector.d/*.yaml vector/tests/transforms.yaml   (needs no Kafka/Elasticsearch/Splunk)
+tests:
+  - name: ecs_document_gets_deterministic_id_and_typed_timestamp
+    inputs:
+      - insert_at: ecs_prepare
+        type: log
+        log_fields:
+          message: '{"@timestamp":"2026-09-30T03:49:38.266177+00:00","message":"Failed password","source":{"ip":"185.220.101.4"},"event":{"kind":"event","original":"raw line"},"host":{"name":"web-01"}}'
+          topic: logunify.ecs
+          partition: 2
+          offset: 41
+          source_type: kafka
+    outputs:
+      - extract_from: ecs_prepare
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.event.id, "logunify.ecs:2:41")
+              assert_eq!(.event.original, "raw line")
+              assert_eq!(.source.ip, "185.220.101.4")
+              assert!(is_timestamp(."@timestamp"))
+              assert_eq!(.labels.forwarder, "vector")
+              assert!(is_string(.labels.env))
+
+  - name: existing_event_id_and_labels_are_preserved
+    inputs:
+      - insert_at: ecs_prepare
+        type: log
+        log_fields:
+          message: '{"@timestamp":"2026-01-01T00:00:00Z","event":{"id":"upstream-7"},"labels":{"team":"soc"}}'
+          topic: logunify.ecs
+          partition: 0
+          offset: 1
+    outputs:
+      - extract_from: ecs_prepare
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.event.id, "upstream-7")
+              assert_eq!(.labels.team, "soc")
+              assert_eq!(.labels.forwarder, "vector")
+
+  - name: missing_or_garbage_timestamp_falls_back_to_now_instead_of_losing_the_event
+    inputs:
+      - insert_at: ecs_prepare
+        type: log
+        log_fields:
+          message: '{"message":"no timestamp"}'
+          topic: t
+          partition: 0
+          offset: 5
+      - insert_at: ecs_prepare
+        type: log
+        log_fields:
+          message: '{"@timestamp":"not a date","message":"bad timestamp"}'
+          topic: t
+          partition: 0
+          offset: 6
+    outputs:
+      - extract_from: ecs_prepare
+        conditions:
+          - type: vrl
+            source: |
+              assert!(is_timestamp(."@timestamp"))
+              assert!(exists(.event.id))
+
+  - name: non_object_and_invalid_json_go_to_dlq_untouched
+    inputs:
+      - insert_at: ecs_prepare
+        type: log
+        log_fields:
+          message: 'this is not json'
+          topic: logunify.ecs
+          partition: 0
+          offset: 9
+      - insert_at: ecs_prepare
+        type: log
+        log_fields:
+          message: '[1,2,3]'
+          topic: logunify.ecs
+          partition: 0
+          offset: 10
+    outputs:
+      - extract_from: ecs_prepare.dropped
+        conditions:
+          - type: vrl
+            source: |
+              assert!(.message == "this is not json" || .message == "[1,2,3]")
+              assert_eq!(.topic, "logunify.ecs")
+
+  - name: elasticsearch_shape_copies_event_id_to_es_id
+    inputs:
+      - insert_at: to_elasticsearch
+        type: log
+        log_fields:
+          event: { id: "logunify.ecs:0:7" }
+    outputs:
+      - extract_from: to_elasticsearch
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.es_id, "logunify.ecs:0:7")
+              assert_eq!(.event.id, "logunify.ecs:0:7")
+
+  - name: splunk_shape_copies_timestamp_and_keeps_ecs_fields
+    inputs:
+      - insert_at: to_splunk
+        type: log
+        log_fields:
+          "@timestamp": "2026-09-30T03:49:38Z"
+          host: { name: "web-01" }
+    outputs:
+      - extract_from: to_splunk
+        conditions:
+          - type: vrl
+            source: |
+              assert!(exists(.splunk_time))
+              assert!(exists(."@timestamp"))
+              assert_eq!(.host.name, "web-01")

@@ -1,0 +1,36 @@
+# environments and caches
+.venv/
+venv/
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# secrets: never commit; the *.example templates are the documented way to configure
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# per-project runtime folders (were already ignored inside logunify-forwarder/)
+logunify-forwarder/.secrets/
+logunify-forwarder/.e2e/
+logunify-forwarder/.vector-data/
+next-env.d.ts
+*.tsbuildinfo
+
+# local databases and runtime data (alerts, audit log, durable state, dead-letter, compliance reports)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+logunify-backend/data/
+*.corrupt-*
+es-dlq*.jsonl
+
+# large local tools and downloads (see each project's README for where to get them)
+logunify-flink/tools/
+logunify-forwarder/tools/
+logunify-flink/jars/*.jar

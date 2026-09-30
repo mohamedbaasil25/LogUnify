@@ -1,0 +1,8 @@
+<!-- Add to /var/ossec/etc/ossec.conf on the host where the Vector Wazuh file sink writes.
+     The agent tails the JSON file and ships it over its authenticated, encrypted channel (TCP 1514) with local buffering. -->
+<ossec_config>
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/log/logunify/ecs-%Y-%m-%d.json</location>
+  </localfile>
+</ossec_config>

@@ -1,0 +1,17 @@
+# Dead-letter queue: anything the forwarder cannot turn into an ECS object lands here, unmodified,
+# instead of being dropped. Alert on this topic having any lag/volume; replay after fixing the producer.
+sinks:
+  dlq:
+    type: kafka
+    inputs: ["ecs_prepare.dropped"]
+    bootstrap_servers: "${KAFKA_BOOTSTRAP:-localhost:9092}"
+    topic: "${DLQ_TOPIC:-logunify.ecs.dlq}"
+    encoding:
+      codec: json
+    librdkafka_options:
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      broker.address.family: "${KAFKA_ADDRESS_FAMILY:-any}"
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block

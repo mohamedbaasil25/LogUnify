@@ -1,0 +1,41 @@
+{
+  "index_patterns": ["logs-logunify-*"],
+  "data_stream": {},
+  "priority": 500,
+  "composed_of": ["logs@mappings", "ecs@mappings"],
+  "_meta": { "description": "LogUnify ECS documents", "managed_by": "logunify-forwarder" },
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "logunify-cert-in",
+      "index.number_of_shards": 1,
+      "index.number_of_replicas": 1,
+      "index.codec": "best_compression",
+      "index.refresh_interval": "5s",
+      "index.mapping.total_fields.limit": 2000,
+      "index.mapping.ignore_malformed": true
+    },
+    "mappings": {
+      "properties": {
+        "event": { "properties": { "original": { "type": "keyword", "index": false, "doc_values": false } } },
+        "labels": { "type": "flattened" },
+        "logunify": {
+          "properties": {
+            "source_format": { "type": "keyword" },
+            "geoip": { "type": "keyword" },
+            "mitre": { "properties": { "basis": { "type": "keyword" } } },
+            "template": { "properties": { "id": { "type": "long" }, "text": { "type": "match_only_text" } } },
+            "anomaly": { "properties": { "score": { "type": "float" }, "model_ready": { "type": "boolean" } } },
+            "ti": {
+              "properties": {
+                "matched": { "type": "boolean" },
+                "match_count": { "type": "integer" },
+                "matched_field": { "type": "keyword" },
+                "matches": { "type": "flattened" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
