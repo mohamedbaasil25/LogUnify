@@ -9,7 +9,7 @@
 * Re-creating the backend container keeps its identity (worker slot `w0`) and finds its state, raw archive and audit chain again; two replicas lease `w0`/`w1` and
   split the Kafka partitions between them.
 **Not built or run:** the Flink image (needs ~1 GB of downloads; its lock file and Dockerfile are written), the Vector forwarder image and the `siem` profile (the base image tags
-were checked to exist), and everything beyond one host. The CI workflow (`.github/workflows/ci.yml`) has not run on GitHub yet. Image sizes: backend 669 MB, dashboard 322 MB.
+were checked to exist), and everything beyond one host. The CI workflow (`.github/workflows/ci.yml`) runs on GitHub Actions and passes: lint, all test suites, the real-Kafka tests, gitleaks, pip-audit, npm audit, and a Trivy scan of both images (0 fixable HIGH/CRITICAL). Image sizes: backend 669 MB, dashboard 322 MB.
 
 ## What is in the stack (`compose.yaml`)
 Kafka (KRaft, topics created explicitly with `LOGUNIFY_PARTITIONS` partitions) -> backend -> dashboard; optional profiles `flink` (PyFlink job) and `siem` (Vector -> Elasticsearch / Splunk /

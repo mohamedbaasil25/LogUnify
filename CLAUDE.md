@@ -32,7 +32,7 @@ logunify-dashboard (Next.js) ──► SOC console over the backend API (proxied
 | `logunify-backend/app/` | `parsers/` (syslog, json, cef, text, detect) · `ecs/normalizer.py` · `pipeline/` (bus: memory/Kafka, processor, metrics) · `intel/` (Drain3, anomaly, mitre rules, ecs_mapper) · `enrich/geoip.py` · `threatintel/` (store, misp, service) · `integrity/` (merkle, batcher, ledger, cli) · `alerting/` (rules, cert_in report, manager, notifiers, store) · `api/` · `sources.py` · `mock/generators.py` · `pipeline/` also has `envelope.py` (event.id/hash), `dlq.py`, `stream.py` (SSE) · `archive/` (encrypted raw archive) · `parsers/sdk.py` + `builtin/*.yaml` (parser SDK) · `ecs/taxonomy.py` + `validate.py` · `forwarding/` (async ES Bulk forwarder) · `state/` (aiosqlite persistence) · `listeners/` (syslog UDP/TCP) · `privacy/` (PII redaction) · `security/` (JWT, RBAC guard, hash-chained audit) · `compliance/` (retention proof, PCI/HIPAA/ISO/CERT-In mapping, PDF) · `config.py` (all settings `LOGUNIFY_*`) |
 | `logunify-backend/docs/ALERTING.md` | CERT-In 6-hour workflow, field map, calibration, runbook |
 | `logunify-backend/docs/PIPELINE.md` | envelope/traceability, no-loss delivery, parser SDK, taxonomy, throughput numbers, scale-out |
-| `deploy/`, `compose.yaml`, `.github/workflows/ci.yml` | containers (backend/dashboard/kafka stack built + smoke-tested; flink/vector images and CI not run), hash-pinned locks, offline bundle, `deploy/smoke_test.py` |
+| `deploy/`, `compose.yaml`, `.github/workflows/ci.yml` | containers (backend/dashboard/kafka stack built + smoke-tested, CI green on GitHub; flink/vector images not built), hash-pinned locks, offline bundle, `deploy/smoke_test.py` |
 | `logunify-backend/docs/CONFIGURATION.md` | where every secret comes from (env vars / secret files), generation and rotation |
 | `logunify-backend/docs/FORWARDING.md` | Python ES Bulk forwarder: guarantees, retry table, dead-letter, verification status |
 | `logunify-backend/docs/STATE.md` | what is persisted, flush design, failure behaviour, limits |
@@ -69,7 +69,7 @@ python retention/capacity.py --eps 500
 
 1. **Calibrate the alert threshold**: at 0.9 nothing fires (0 alerts / 58k logs; 0.80 → 6). Use `alert_threshold_survey.py` on real traffic.
 2. **Real IdP**: RBAC + audit exist (HS256 JWT, `LOGUNIFY_AUTH_MODE=jwt`; default `off` = open). Still to do: RS256/JWKS (Keycloak/Entra), mTLS, run the live ILM check against a real cluster.
-3. **Remaining deployment work:** build/run the Flink + Vector images and the GitHub Actions workflow, Helm chart, one shared state store for multi-worker. Flink output (`logunify.siem`) has no consumer yet.
+3. **Remaining deployment work:** build/run the Flink + Vector images, Helm chart, one shared state store for multi-worker. Flink output (`logunify.siem`) has no consumer yet.
 3b. **Replace placeholders**: MaxMind GeoIP, live MISP, real Hyperledger Fabric gateway (`submit_anchor`/`get_anchor`), validated ATT&CK analytics.
 4. **Validate lifecycle policies on real clusters** (ES ILM, Splunk indexes.conf, Wazuh rules via `wazuh-logtest`, ISM); size with `capacity.py`.
 5. **Persistence**: sources, IOC feeds, batches, anchors, recent logs now persist (`state/`, aiosqlite, `docs/STATE.md`). Still in memory: Drain3 templates, Isolation Forest, TI hit history, metrics. Single-process only.

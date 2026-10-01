@@ -49,7 +49,7 @@ Be explicit about this before showing the system to anyone, especially an audito
   ATT&CK rules (heuristic, not validated detection content). Mock data is labelled in code, UI and reports.
 * **Not verified against real systems:** Elasticsearch, Splunk and Wazuh (tested against protocol stubs; Elasticsearch cannot run on the
   development machine), the live MISP client, Elasticsearch ILM checks on a real cluster, the Python Bulk forwarder.
-* **Not run:** the Flink and Vector images / `siem` profile and the GitHub Actions workflow (the backend + dashboard images and the Kafka compose stack were built and smoke-tested; see `deploy/README.md`).
+* **Not run:** the Flink and Vector images / `siem` profile (the backend + dashboard images and the Kafka compose stack were built and smoke-tested, and the GitHub Actions workflow passes all 8 jobs, including the real-Kafka tests and the Trivy image scan; see `deploy/README.md`).
 * **Not implemented:** Helm/Kubernetes manifests, TLS for syslog, mTLS between components, OIDC/JWKS (RS256) token verification (HS256 shared-secret JWT only),
   multi-instance state sharing.
 * **Defaults are open for development:** `LOGUNIFY_AUTH_MODE=off` treats every caller as admin. Set `jwt` before exposing the API.
