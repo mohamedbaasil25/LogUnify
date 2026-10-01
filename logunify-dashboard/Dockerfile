@@ -17,6 +17,8 @@ RUN npm run build
 FROM ${NODE_IMAGE}
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 LOGUNIFY_API_URL=http://backend:8000
+# the runtime needs only `node`: drop npm/npx/corepack/yarn (their bundled modules are most of what image scanners flag)
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn* /usr/local/bin/yarn*
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 USER node

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Download the two jars the Flink image needs into logunify-flink/jars/ and verify their SHA-256 (run on a connected host).
 set -euo pipefail
+mkdir -p "$(dirname "$0")/../logunify-flink/jars"      # the folder is git-ignored, so a fresh checkout does not have it
 cd "$(dirname "$0")/../logunify-flink/jars"
 fetch() {  # url sha256
   f="$(basename "$1")"
