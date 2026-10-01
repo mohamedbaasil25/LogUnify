@@ -1,0 +1,33 @@
+# AWS CloudTrail record (one JSON object per line, e.g. after unwrapping the Records[] array). kind: json maps JSON paths to ECS.
+name: aws_cloudtrail
+version: "1.0.0"
+kind: json
+description: AWS CloudTrail management / data event
+priority: 20
+sniff:
+  keys: [eventSource, eventName, awsRegion]
+  confidence: 0.97
+timestamp:
+  path: eventTime
+message_path: eventName
+fields:
+  event.action:               {path: eventName}
+  event.provider:             {path: eventSource}
+  cloud.provider:             {value: aws}
+  cloud.region:               {path: awsRegion}
+  cloud.account.id:           {path: recipientAccountId}
+  source.ip:                  {path: sourceIPAddress, type: ip}
+  user_agent.original:        {path: userAgent}
+  user.name:                  {path: userIdentity.userName}
+  user.id:                    {path: userIdentity.principalId}
+  event.reason:               {path: errorMessage}
+  labels.cloudtrail_event_id: {path: eventID}
+rules:
+  - when: {field: errorCode, regex: ".+"}
+    set: {event.outcome: failure}
+static:
+  event.kind: event
+  event.category: [api]
+  event.type: [info]
+  event.outcome: success
+  event.module: aws

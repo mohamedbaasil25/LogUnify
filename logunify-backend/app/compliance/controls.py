@@ -133,8 +133,11 @@ def evaluate(c: Ctx) -> list[dict]:
     add("ISO 27001:2022", "A.8.5", "Secure authentication", "Authenticate users securely", rb_st, rb_ev)
     add("ISO 27001:2022", "A.8.11", "Data masking", "Mask data per access-control and business requirements", pii_st, pii_note)
     add("ISO 27001:2022", "A.5.34", "Privacy and PII protection", "Protect PII per law and contract (GDPR, DPDP Act)", pii_st, pii_note)
+    arch_ev = ("raw archive ON (" + ("AES-256-GCM encrypted" if s.raw_archive_key else "NOT ENCRYPTED") + f", retention {s.raw_archive_retention_days or 'unlimited'} d): "
+               "/api/v1/trace/{event.id} proves raw bytes -> normalized record -> Merkle batch" if s.raw_archive_enabled else
+               "raw archive OFF: event.hash is stamped on every record but the original bytes are not retained, so a record cannot be proven against what was received")
     add("ISO 27001:2022", "A.5.28", "Collection of evidence", "Procedures to identify, collect and preserve evidence", integ_status,
-        integ_ev + "; evidence endpoint returns record + SHA-256 + batch reference; " + audit_ev)
+        integ_ev + "; evidence endpoint returns record + SHA-256 + batch reference; " + arch_ev + "; " + audit_ev)
     add("ISO 27001:2022", "A.5.24-26", "Incident management", "Plan, assess and respond to incidents",
         "partial" if c.alerting_enabled else "gap", alert_ev + "; CERT-In 6-hour workflow")
     return out

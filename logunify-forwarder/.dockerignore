@@ -1,0 +1,6 @@
+tools/
+tests/
+.e2e/
+.secrets/
+.vector-data/
+__pycache__/

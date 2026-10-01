@@ -74,6 +74,11 @@ _PAN = re.compile(r"\b[A-Z]{3}[ABCFGHLJPT][A-Z]\d{4}[A-Z]\b")
 _PHONE = re.compile(r"(?<![\d-])(?:\+91[ -]?|0)?[6-9]\d{9}(?![\d-])")
 
 
+# cheap gates: most log lines contain no long digit run, no '@' and no PAN-like token, so the expensive validated detectors
+# (and their per-match checksum functions) are skipped entirely for them
+_DIGIT_RUN = re.compile(r"\d{9,}|\d{3}-\d{2}-\d{4}|\d{4}[ -]\d{4}[ -]\d{4}")
+
+
 def _valid_ssn(m: re.Match) -> bool:
     area, group, serial = m.groups()
     return area not in ("000", "666") and not area.startswith("9") and group != "00" and serial != "0000"
@@ -111,8 +116,11 @@ class PiiRedactor:
             return rx.sub(repl, text_in)
 
         out = text
+        digits = _DIGIT_RUN.search(text) is not None
         for kind in ("card", "aadhaar", "ssn", "pan", "email", "phone"):        # order: long digit runs before short ones
             if kind not in self.types:
+                continue
+            if (kind in ("card", "aadhaar", "ssn", "phone") and not digits) or (kind == "email" and "@" not in text):
                 continue
             if kind == "card":
                 out = sub(kind, _CARD, lambda m: _plausible_card(re.sub(r"\D", "", m.group(0))), out)

@@ -1,0 +1,29 @@
+{
+  "@timestamp": "2026-10-01T12:00:00+00:00",
+  "destination.ip": "10.0.0.2",
+  "destination.port": 22,
+  "ecs.version": "8.11.0",
+  "event.action": "blocked",
+  "event.category": [
+    "network"
+  ],
+  "event.code": "100",
+  "event.dataset": "logunify.cef",
+  "event.kind": "event",
+  "event.module": "cef",
+  "event.original": "CEF:0|Acme|IDS|1.0|100|scan detected|5|src=10.0.0.1 dst=10.0.0.2 dpt=22 act=blocked",
+  "event.outcome": "failure",
+  "event.reason": "scan detected",
+  "event.severity": 5,
+  "event.type": [
+    "connection"
+  ],
+  "logunify.parser.name": "cef",
+  "logunify.source_format": "cef",
+  "logunify.timestamp.source": "received",
+  "message": "scan detected",
+  "observer.product": "IDS",
+  "observer.vendor": "Acme",
+  "observer.version": "1.0",
+  "source.ip": "10.0.0.1"
+}

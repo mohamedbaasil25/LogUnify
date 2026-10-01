@@ -7,14 +7,30 @@ log = logging.getLogger("logunify.listeners")
 
 
 class ListenerManager:
-    def __init__(self, submit, settings):
-        self._submit, self._s = submit, settings
+    def __init__(self, pipeline_or_submit, settings):
+        # accepts the Pipeline (preferred: gives batched submission) or a bare submit(raw, hint, **kw) coroutine function
+        self._submit_many = getattr(pipeline_or_submit, "submit_many", None) or self._wrap(pipeline_or_submit)
+        self._s = settings
         self._by_id: dict[str, SyslogListener] = {}
 
-    def _make(self, name: str, udp: int | None, tcp: int | None, hint: str | None) -> SyslogListener:
+    def _make(self, name: str, udp: int | None, tcp: int | None, hint: str | None, source_id: str | None = None,
+              tz: str | None = None) -> SyslogListener:
         s = self._s
-        return SyslogListener(self._submit, s.syslog_bind, udp, tcp, hint, s.syslog_queue_max, s.syslog_max_message_bytes,
-                              s.syslog_max_connections, s.syslog_idle_timeout_s, name)
+
+        async def submit_many(raws: list[bytes], h: str | None) -> int:
+            return await self._submit_many(raws, h, source_id=source_id, transport="syslog", tz=tz)
+
+        async def submit_one(raw: bytes, h: str | None) -> bool:
+            return await submit_many([raw], h) == 1
+
+        return SyslogListener(submit_one, s.syslog_bind, udp, tcp, hint, s.syslog_queue_max, s.syslog_max_message_bytes,
+                              s.syslog_max_connections, s.syslog_idle_timeout_s, name, submit_many=submit_many)
+
+    @staticmethod
+    def _wrap(submit):
+        async def many(raws, hint, **kw):
+            return sum([await submit(r, hint, **kw) for r in raws])
+        return many
 
     async def start_default(self) -> None:
         s = self._s
@@ -32,7 +48,7 @@ class ListenerManager:
         cfg = src.config
         udp = cfg["port"] if cfg["protocol"] == "udp" else None
         tcp = cfg["port"] if cfg["protocol"] == "tcp" else None
-        lst = self._make(f"syslog-{src.id}", udp, tcp, None if src.format == "auto" else src.format)
+        lst = self._make(f"syslog-{src.id}", udp, tcp, None if src.format == "auto" else src.format, src.id, cfg.get("timezone"))
         await lst.start()
         self._by_id[src.id] = lst
 

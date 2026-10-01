@@ -1,7 +1,7 @@
 """Forward ECS documents to Elasticsearch with the Bulk API (aiohttp): batching, retries, dead-letter file.
 
 Delivery guarantee: AT-LEAST-ONCE with idempotent writes. Every document is sent as a `create` action with a deterministic `_id`
-(SHA-256 of its JSON), so a retry after a lost response cannot create a duplicate: Elasticsearch answers 409 for the copy it
+(its `event.id`, else the SHA-256 of its JSON), so a retry after a lost response cannot create a duplicate: Elasticsearch answers 409 for the copy it
 already has and that is counted as success. `create` is also what data streams (`logs-logunify-*`) require.
 
 What is retried (whole request, exponential backoff with full jitter, `Retry-After` honoured):
@@ -82,7 +82,9 @@ def build_items(docs: list[dict], index: str) -> tuple[list[Item], list[tuple[di
         except (TypeError, ValueError) as e:
             bad.append((d, f"unserializable:{e}"[:200]))
             continue
-        did = hashlib.sha256(src).hexdigest()[:40]
+        eid = (d.get("event") or {}).get("id") if isinstance(d.get("event"), dict) else None
+        # event.id (stamped at the door) is the identity: the same value Vector's sink uses, so the two paths cannot both index a log
+        did = eid if isinstance(eid, str) and 0 < len(eid) <= 512 and '"' not in eid and "\\" not in eid else hashlib.sha256(src).hexdigest()[:40]
         items.append(Item(did, head + did.encode() + b'"}}', src))
     return items, bad
 

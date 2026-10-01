@@ -33,25 +33,34 @@ class LogIntelligence:
 
     def analyze(self, parsed: ParsedLog) -> Analysis:
         """Enrich `parsed.fields` in place (setdefault only) and return the analysis."""
-        text = parsed.message or parsed.original
-        mined = self.miner.mine(text)
+        return self.analyze_many([parsed])[0]
 
-        added = {k: v for k, v in map_to_ecs(mined).items() if k not in parsed.fields}
-        parsed.fields.update(added)
-
-        score = self.scorer.score(self._features(parsed, mined, len(text)), learn=self.miner.total > self.settle)
-        tag = None
-        f = parsed.fields
-        f["logunify.template.id"] = mined.cluster_id
-        f["logunify.template.text"] = mined.template
-        f["logunify.anomaly.score"] = score
-        f["logunify.anomaly.model_ready"] = self.scorer.ready
-        if score > self.threshold:
-            self.anomalies += 1
-            t = mitre.tag(f, text)
-            f.update(t)
-            tag = t["threat.technique.id"]
-        return Analysis(mined.cluster_id, mined.template, mined.is_new, score, self.scorer.ready, tag, added)
+    def analyze_many(self, parsed_list: list[ParsedLog]) -> list[Analysis]:
+        """Same as `analyze`, for a batch: templates are mined in order (Drain3 is sequential by nature), then ALL logs are scored
+        with one Isolation Forest call. Per-call overhead dominates single-row scoring, so this is several times faster per log."""
+        staged = []
+        for parsed in parsed_list:
+            text = parsed.message or parsed.original
+            mined = self.miner.mine(text)
+            added = {k: v for k, v in map_to_ecs(mined).items() if k not in parsed.fields}
+            parsed.fields.update(added)
+            staged.append((parsed, text, mined, added, self._features(parsed, mined, len(text)), self.miner.total > self.settle))
+        scores = self.scorer.score_many([s[4] for s in staged], [s[5] for s in staged])
+        out = []
+        for (parsed, text, mined, added, _feat, _learn), score in zip(staged, scores):
+            tag = None
+            f = parsed.fields
+            f["logunify.template.id"] = mined.cluster_id
+            f["logunify.template.text"] = mined.template
+            f["logunify.anomaly.score"] = score
+            f["logunify.anomaly.model_ready"] = self.scorer.ready
+            if score > self.threshold:
+                self.anomalies += 1
+                t = mitre.tag(f, text)
+                f.update(t)
+                tag = t["threat.technique.id"]
+            out.append(Analysis(mined.cluster_id, mined.template, mined.is_new, score, self.scorer.ready, tag, added))
+        return out
 
     def _features(self, p: ParsedLog, m, msg_len: int) -> list[float]:
         f = p.fields

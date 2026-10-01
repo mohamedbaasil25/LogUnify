@@ -1,0 +1,26 @@
+{
+  "@timestamp": "2026-10-11T22:14:15.003000+00:00",
+  "ecs.version": "8.11.0",
+  "event.category": [
+    "authentication"
+  ],
+  "event.code": "ID47",
+  "event.dataset": "logunify.syslog",
+  "event.kind": "event",
+  "event.module": "syslog",
+  "event.original": "<86>1 2026-10-11T22:14:15.003Z web-01 sudo 4242 ID47 - alice : TTY=pts/0 ; COMMAND=/usr/bin/apt update",
+  "event.severity": 6,
+  "event.type": [
+    "info"
+  ],
+  "host.name": "web-01",
+  "log.level": "info",
+  "log.syslog.facility.code": 10,
+  "log.syslog.facility.name": "authpriv",
+  "log.syslog.priority": 86,
+  "logunify.parser.name": "syslog",
+  "logunify.source_format": "syslog",
+  "message": "alice : TTY=pts/0 ; COMMAND=/usr/bin/apt update",
+  "process.name": "sudo",
+  "process.pid": 4242
+}

@@ -1,0 +1,33 @@
+# Linux netfilter / iptables LOG target, with or without a syslog <PRI>. Beats the generic syslog parser on confidence.
+name: iptables_log
+version: "1.0.0"
+kind: regex
+description: Linux netfilter (iptables/nftables LOG) packet logs
+priority: 10
+sniff:
+  contains: [" SRC=", " DST=", "PROTO="]
+  confidence: 0.93
+match:
+  regex: '^(?:<\d{1,3}>)?(?P<ts>[A-Z][a-z]{2}\s+\d{1,2} \d\d:\d\d:\d\d) (?P<host>\S+) kernel: (?:\[\s*[\d.]+\] )?(?P<prefix>[^=]*?)IN=(?P<in>\S*) OUT=(?P<out>\S*) .*?SRC=(?P<src>\S+) DST=(?P<dst>\S+) .*?PROTO=(?P<proto>[A-Za-z0-9]+)(?: SPT=(?P<spt>\d+) DPT=(?P<dpt>\d+))?'
+timestamp:
+  field: ts
+message: "{proto} {src} -> {dst}"
+fields:
+  host.name:                          {from: host}
+  source.ip:                          {from: src, type: ip}
+  destination.ip:                     {from: dst, type: ip}
+  source.port:                        {from: spt, type: int}
+  destination.port:                   {from: dpt, type: int}
+  network.transport:                  {from: proto, transform: lower}
+  observer.ingress.interface.name:    {from: in, drop_if: [""]}
+  observer.egress.interface.name:     {from: out, drop_if: [""]}
+  rule.name:                          {from: prefix, transform: strip, drop_if: [""]}
+rules:
+  - when: {field: prefix, regex: "(?i)drop|reject|deny|block"}
+    set: {event.outcome: failure, event.type: [connection, denied]}
+static:
+  event.kind: event
+  event.category: [network]
+  event.type: [connection]
+  event.module: netfilter
+  observer.type: firewall

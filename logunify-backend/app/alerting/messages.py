@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 
 from . import cert_in
 from .redact import clean
-from .rules import get
 
 SCHEMA = "logunify.alert/v1"
 

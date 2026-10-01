@@ -2,10 +2,9 @@
 
 import { ChevronRight, Pause, Play, Search } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
-import { api } from "@/lib/api";
 import { docKey, fmtTime, hasIndicator, severityOf, type Severity } from "@/lib/format";
 import type { EcsDoc } from "@/lib/types";
-import { usePoll } from "@/lib/usePoll";
+import { useLiveLogs } from "@/lib/useLiveLogs";
 import { AttackTag, GeoBadge, SeverityBadge, TiBadge } from "./Badges";
 
 type Filter = "all" | "ti" | Severity;
@@ -34,12 +33,12 @@ export default function LogStream() {
   const [sev, setSev] = useState<Filter>("all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  const { data, error } = usePoll((s) => api.recent(100, s), 2000, !paused);
+  const { items, live, error, lagged } = useLiveLogs(paused);
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const seen = new Map<string, number>();
-    return (data?.items ?? [])
+    return items
       .map((d) => {
         const base = docKey(d);
         const n = seen.get(base) ?? 0;          // identical lines in the same instant would collide
@@ -55,15 +54,15 @@ export default function LogStream() {
             .toLowerCase()
             .includes(needle),
       );
-  }, [data, sev, q]);
+  }, [items, sev, q]);
 
   return (
     <section className="rounded-lg border border-line bg-panel" aria-label="Live log stream">
       <header className="flex flex-wrap items-center gap-3 border-b border-line p-3">
         <div className="mr-auto flex items-center gap-2">
-          <span className={`h-2 w-2 rounded-full ${error ? "bg-crit" : paused ? "bg-warn" : "animate-pulse bg-ok"}`} aria-hidden />
+          <span className={`h-2 w-2 rounded-full ${error && !live ? "bg-crit" : paused ? "bg-warn" : live ? "animate-pulse bg-ok" : "bg-warn"}`} aria-hidden />
           <h2 className="text-sm font-semibold">Live log stream</h2>
-          <span className="text-xs text-mute">{error ? "backend unreachable" : paused ? "paused" : "updating every 2s"}</span>
+          <span className="text-xs text-mute">{error && !live ? "backend unreachable" : paused ? "paused" : live ? (lagged ? `live (push) · ${lagged} skipped` : "live (push)") : "connecting… polling every 15s"}</span>
         </div>
         <label className="relative">
           <span className="sr-only">Search logs</span>
@@ -174,9 +173,9 @@ export default function LogStream() {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-10 text-center text-mute">
-                  {error && !data
+                  {error && items.length === 0
                     ? "Can't reach the LogUnify API. Is the backend running on port 8000?"
-                    : data
+                    : items.length > 0
                       ? "No events match the current filters."
                       : "Waiting for events…"}
                 </td>

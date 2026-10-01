@@ -28,7 +28,7 @@ logunify-dashboard (Next.js)  SOC console over the backend API
 ## Quick start (development)
 
 ```bash
-# backend on :8000 (in-memory bus, mock event generator)
+# backend on :8000 (in-memory bus; add LOGUNIFY_MOCK_ENABLED=true for demo traffic)
 cd logunify-backend
 python -m pip install -r requirements.txt
 cp .env.example .env            # optional; every setting is a LOGUNIFY_* variable
@@ -38,7 +38,7 @@ python -m uvicorn app.main:app
 cd logunify-dashboard && npm install && npm run dev
 ```
 
-Tests: `python -m pytest tests -q` in `logunify-backend` (303), `logunify-forwarder` (54) and `logunify-flink` (33, needs its
+Tests: `python -m pytest tests -q -m "not kafka"` in `logunify-backend` (354, plus 2 Linux-only worker-slot tests that run in CI and in the container; 3 more against a real Kafka broker with `-m kafka`), `logunify-forwarder` (54) and `logunify-flink` (33, needs its
 Python 3.11 venv). Dashboard: `npm run typecheck && npm run build`. See [`CLAUDE.md`](CLAUDE.md) for the exact commands.
 
 ## What is real and what is not
@@ -49,7 +49,8 @@ Be explicit about this before showing the system to anyone, especially an audito
   ATT&CK rules (heuristic, not validated detection content). Mock data is labelled in code, UI and reports.
 * **Not verified against real systems:** Elasticsearch, Splunk and Wazuh (tested against protocol stubs; Elasticsearch cannot run on the
   development machine), the live MISP client, Elasticsearch ILM checks on a real cluster, the Python Bulk forwarder.
-* **Not implemented:** TLS for syslog, mTLS between components, OIDC/JWKS (RS256) token verification (HS256 shared-secret JWT only),
+* **Not run:** the Flink and Vector images / `siem` profile and the GitHub Actions workflow (the backend + dashboard images and the Kafka compose stack were built and smoke-tested; see `deploy/README.md`).
+* **Not implemented:** Helm/Kubernetes manifests, TLS for syslog, mTLS between components, OIDC/JWKS (RS256) token verification (HS256 shared-secret JWT only),
   multi-instance state sharing.
 * **Defaults are open for development:** `LOGUNIFY_AUTH_MODE=off` treats every caller as admin. Set `jwt` before exposing the API.
 * **Alert threshold:** at the specified 0.9 anomaly score nothing fired on the test corpus; calibrate on real traffic with
@@ -66,4 +67,5 @@ Large local tools (`logunify-*/tools/`, Flink jars, virtualenvs, `node_modules`)
 
 [Alerting and the CERT-In workflow](logunify-backend/docs/ALERTING.md) · [Security: PII, RBAC, audit, compliance](logunify-backend/docs/SECURITY.md) ·
 [Durable state](logunify-backend/docs/STATE.md) · [Elasticsearch forwarding](logunify-backend/docs/FORWARDING.md) ·
+[Pipeline guarantees, parsers, scale-out](logunify-backend/docs/PIPELINE.md) · [Containers and air-gap](deploy/README.md) ·
 [Configuration](logunify-backend/docs/CONFIGURATION.md) · [Forwarder workflow and retention](logunify-forwarder/docs/WORKFLOW.md)

@@ -1,7 +1,40 @@
-from pydantic import SecretStr
+import re
+
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .alerting.defaults import DEFAULT_CRITICAL_TECHNIQUES
+
+
+_SLOT: dict = {}
+
+
+def acquire_slot(directory: str) -> tuple[str, object]:
+    """Lease the lowest free replica slot with an advisory flock held for the life of the process. A restarted or RECREATED
+    container (new container id, new hostname) gets its old slot back, so its SQLite files, dead-letter file, raw archive and
+    Merkle batch sequence are found again. Returns (worker_id, open file). Linux/macOS only (fcntl)."""
+    import fcntl
+    import os
+    os.makedirs(directory, exist_ok=True)
+    for n in range(256):
+        f = open(os.path.join(directory, f"w{n}.lock"), "a+")
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return f"w{n}", f
+        except OSError:
+            f.close()
+    raise RuntimeError(f"no free worker slot in {directory} (256 replicas already running?)")
+
+
+def _auto_worker_id(directory: str) -> str:
+    """Once per process (several Settings objects can exist in one process); falls back to the hostname where fcntl is missing."""
+    if "id" not in _SLOT:
+        try:
+            _SLOT["id"], _SLOT["fd"] = acquire_slot(directory)
+        except ImportError:                          # Windows: development only
+            import socket
+            _SLOT["id"] = re.sub(r"[^A-Za-z0-9_.-]", "", socket.gethostname())[:24] or "0"
+    return _SLOT["id"]
 
 
 class Settings(BaseSettings):
@@ -12,6 +45,21 @@ class Settings(BaseSettings):
     kafka_raw_topic: str = "logunify.raw"
     kafka_ecs_topic: str = "logunify.ecs"
     kafka_group: str = "logunify-pipeline"
+
+    kafka_linger_ms: int = 20
+    kafka_compression: str = "gzip"   # gzip | none (| snappy / lz4 / zstd if the client library is installed). Compression runs on the event loop
+    kafka_request_timeout_ms: int = 30_000
+    kafka_publish_max_wait_s: float = 300.0   # ECS publish retried this long (broker outage) before the raw log is dead-lettered
+    kafka_batch_wait_s: float = 0.5
+    batch_max: int = 500          # logs fetched per poll / committed together
+    process_chunk: int = 32       # logs processed per event-loop slice (then the loop yields), bounds alerting latency
+    worker_id: str = ""           # set per replica when scaling out: prefixes batch ids so replicas never collide
+    default_timezone: str = "UTC" # for source timestamps that carry no offset (override per source with its `timezone`)
+    dlq_path: str = "data/dlq.jsonl"   # logs that could not be normalized: kept, counted, replayable
+    dlq_max_mb: int = 512
+
+    worker_slot_dir: str = "data/.slots"   # LOGUNIFY_WORKER_ID=auto leases w0, w1, ... here (flock); mount it on the shared volume
+    version: str = "1.0.0"          # reported by /health (set LOGUNIFY_VERSION to the image tag)
 
     queue_max: int = 10_000       # in-memory bus capacity; overflow => dropped
     recent_buffer: int = 1_000    # parsed ECS events kept for /logs/recent
@@ -86,6 +134,18 @@ class Settings(BaseSettings):
     compliance_report_dir: str = "data/compliance"
     compliance_report_interval_hours: float = 0    # >0: write a signed-hash JSON + PDF report on this schedule (0 = on demand)
 
+    taxonomy_mode: str = "warn"    # ECS validation of every document: off | warn (count violations) | strict (dead-letter violators)
+    cors_origins: str = ""         # CSV of allowed browser origins; empty = no CORS (the dashboard uses a same-origin proxy). "*" is refused
+    parser_dir: str = ""           # extra parsers: *.yaml (declarative) and *.py (plugins); see app/parsers/sdk.py
+
+    # ---- raw archive (app/archive): encrypted unredacted originals, the evidence behind event.hash ----------------------
+    raw_archive_enabled: bool = False
+    raw_archive_dir: str = "data/raw"
+    raw_archive_key: SecretStr | None = None       # base64 of 32 random bytes (AES-256-GCM); required when PII redaction is on
+    raw_archive_allow_plaintext: bool = False      # explicit opt-in to store unredacted raw logs unencrypted: dev only
+    raw_archive_segment_mb: int = 64
+    raw_archive_retention_days: int = 0            # >0 deletes whole segments older than this; 0 keeps everything
+
     # ---- privacy: PII redaction before enrichment / batching / SIEM (GDPR, DPDP Act) — app/privacy/pii.py ---------------
     pii_enabled: bool = True
     pii_types: str = "card,email,ssn,aadhaar,pan"  # CSV of: card,email,ssn,aadhaar,pan,phone
@@ -136,8 +196,20 @@ class Settings(BaseSettings):
     poc_phone: str = ""
     poc_fax: str = ""
 
-    mock_enabled: bool = True
+    mock_enabled: bool = False    # demo traffic generator: opt in with LOGUNIFY_MOCK_ENABLED=true (never in production)
     mock_rate: int = 50           # events per second
+
+    @model_validator(mode="after")
+    def _expand_worker(self):
+        """`{worker}` in any storage path becomes LOGUNIFY_WORKER_ID, so replicas never share (and corrupt) a SQLite file or a
+        dead-letter file: LOGUNIFY_STATE_DB_PATH=/data/{worker}/state.db with LOGUNIFY_WORKER_ID=w3."""
+        if self.worker_id == "auto":                # containers: a STABLE id per replica slot (w0, w1, ...), see acquire_slot()
+            self.worker_id = _auto_worker_id(self.worker_slot_dir)
+        w = self.worker_id or "0"
+        for name in ("alert_db_path", "audit_db_path", "state_db_path", "dlq_path", "raw_archive_dir", "es_forward_dlq_path",
+                     "compliance_report_dir"):
+            setattr(self, name, getattr(self, name).replace("{worker}", w))
+        return self
 
 
 settings = Settings()

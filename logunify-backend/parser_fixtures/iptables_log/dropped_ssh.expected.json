@@ -1,0 +1,29 @@
+{
+  "@timestamp": "2026-10-11T22:14:15+00:00",
+  "destination.ip": "10.0.0.5",
+  "destination.port": 22,
+  "ecs.version": "8.11.0",
+  "event.category": [
+    "network"
+  ],
+  "event.dataset": "logunify.iptables_log",
+  "event.kind": "event",
+  "event.module": "netfilter",
+  "event.original": "<4>Oct 11 22:14:15 fw-01 kernel: [ 123.456] DROP: IN=eth0 OUT= MAC=aa SRC=203.0.113.9 DST=10.0.0.5 LEN=60 TOS=0x00 TTL=64 ID=1 DF PROTO=TCP SPT=44321 DPT=22 WINDOW=1",
+  "event.outcome": "failure",
+  "event.timezone": "UTC",
+  "event.type": [
+    "connection",
+    "denied"
+  ],
+  "host.name": "fw-01",
+  "logunify.parser.name": "iptables_log",
+  "logunify.source_format": "iptables_log",
+  "message": "TCP 203.0.113.9 -> 10.0.0.5",
+  "network.transport": "tcp",
+  "observer.ingress.interface.name": "eth0",
+  "observer.type": "firewall",
+  "rule.name": "DROP:",
+  "source.ip": "203.0.113.9",
+  "source.port": 44321
+}

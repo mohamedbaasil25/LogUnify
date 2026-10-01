@@ -34,3 +34,6 @@ es-dlq*.jsonl
 logunify-flink/tools/
 logunify-forwarder/tools/
 logunify-flink/jars/*.jar
+
+# build output
+dist/

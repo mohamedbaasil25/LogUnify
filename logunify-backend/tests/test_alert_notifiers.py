@@ -1,7 +1,6 @@
 import email
 import json
 import socket
-import time
 from email import policy
 
 import httpx

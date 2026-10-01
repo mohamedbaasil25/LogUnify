@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .ledger import AnchorReceipt
@@ -31,8 +31,8 @@ class Batch:
 class BatchBuilder:
     """Collects ECS documents and seals a Merkle batch every `size` records. Thread-safe."""
 
-    def __init__(self, size: int = 100, max_batches: int = 50):
-        self.size, self.max_batches = size, max_batches
+    def __init__(self, size: int = 100, max_batches: int = 50, prefix: str = "batch"):
+        self.size, self.max_batches, self.prefix = size, max_batches, prefix
         self._pending: list[dict] = []
         self._batches: OrderedDict[str, Batch] = OrderedDict()
         self._seq = 0
@@ -56,7 +56,7 @@ class BatchBuilder:
         leaves = [hash_record(d) for d in docs]
         self._seq += 1
         stamps = [d.get("@timestamp") for d in docs]
-        b = Batch(id=f"batch-{self._seq:06d}", seq=self._seq, root=build_tree(leaves)[-1][0].hex(),
+        b = Batch(id=f"{self.prefix}-{self._seq:06d}", seq=self._seq, root=build_tree(leaves)[-1][0].hex(),
                   count=len(docs), leaves=[x.hex() for x in leaves], docs=docs,
                   first_ts=min((s for s in stamps if s), default=None),
                   last_ts=max((s for s in stamps if s), default=None),

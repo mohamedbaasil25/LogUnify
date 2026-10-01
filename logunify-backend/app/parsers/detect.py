@@ -1,25 +1,17 @@
-from .base import ParsedLog, ParseError
-from .cef import parse_cef
-from .json_parser import parse_json
-from .syslog import parse_syslog
-from .text import parse_text
+"""Entry point kept for existing callers: parse one log with the default parser registry (see sdk.py)."""
+from .base import ParsedLog
+from .sdk import ParserRegistry, build_registry
 
-PARSERS = {"json": parse_json, "cef": parse_cef, "syslog": parse_syslog, "text": parse_text}
+_default: ParserRegistry | None = None
+
+
+def default_registry() -> ParserRegistry:
+    global _default
+    if _default is None:
+        _default = build_registry()
+    return _default
 
 
 def parse_auto(raw: str, hint: str | None = None) -> ParsedLog:
-    """Detect Syslog / JSON / CEF by cheap prefix sniffing (an explicit hint wins)."""
-    s = raw.lstrip()
-    if not s:
-        raise ParseError("empty log")
-    if hint:
-        if hint not in PARSERS:
-            raise ParseError(f"unknown format hint '{hint}'")
-        return PARSERS[hint](raw)
-    if s[0] == "{":
-        return parse_json(raw)
-    if "CEF:" in s[:64]:
-        return parse_cef(raw)
-    if s[0] == "<":
-        return parse_syslog(raw)
-    return parse_text(raw)          # unstructured text: Drain3 handles it downstream
+    """Detect the format (most confident parser wins) or use `hint` (a parser name), and parse. Raises ParseError."""
+    return default_registry().parse(raw, hint)

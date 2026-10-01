@@ -1,0 +1,139 @@
+# CI for LogUnify. NOTE: written and syntax-checked locally; it has not yet run on GitHub Actions: expect to adjust on first run.
+name: ci
+
+on:
+  push: {branches: [main]}
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: logunify-backend}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13", cache: pip, cache-dependency-path: logunify-backend/requirements-dev.txt}
+      - run: pip install -r requirements-dev.txt
+      - name: Lint (pyflakes errors, syntax, unsafe defaults)
+        run: ruff check app tests scripts
+      - name: Parser contract (golden fixtures + ECS validation of every shipped parser)
+        run: python -m app.parsers.cli test --strict
+      - name: Tests (without the Kafka suite)
+        run: python -m pytest tests -q -m "not kafka"
+      - name: Pipeline throughput smoke (prints events/s; informational)
+        run: python scripts/bench_pipeline.py --n 6000
+
+  backend-kafka:
+    runs-on: ubuntu-latest
+    needs: backend
+    defaults: {run: {working-directory: logunify-backend}}
+    env:
+      KAFKA_VERSION: "3.9.1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13", cache: pip, cache-dependency-path: logunify-backend/requirements-dev.txt}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: "17"}
+      - run: pip install -r requirements-dev.txt
+      - name: Fetch Kafka distribution
+        run: |
+          curl -fsSL "https://archive.apache.org/dist/kafka/${KAFKA_VERSION}/kafka_2.13-${KAFKA_VERSION}.tgz" -o /tmp/kafka.tgz
+          tar -xzf /tmp/kafka.tgz -C "$RUNNER_TEMP"
+          echo "LOGUNIFY_KAFKA_HOME=$RUNNER_TEMP/kafka_2.13-${KAFKA_VERSION}" >> "$GITHUB_ENV"
+      - name: No-loss tests against a real broker (round trip, crash before commit, broker outage)
+        run: python -m pytest tests -q -m kafka
+
+  forwarder:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: logunify-forwarder}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - run: pip install pytest pyyaml
+      - run: python -m pytest tests -q
+      - name: 180-day retention policy gate
+        run: python retention/policy_lint.py --eps 300 --outage-hours 4
+
+  flink:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: logunify-flink}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: "11"}
+      - run: pip install -r requirements.txt
+      - run: bash ../deploy/fetch-jars.sh
+      - run: python -m pytest tests -q
+
+  dashboard:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: logunify-dashboard}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "22", cache: npm, cache-dependency-path: logunify-dashboard/package-lock.json}
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - name: Python dependency vulnerabilities (hash-pinned lock)
+        run: |
+          pip install pip-audit
+          pip-audit --require-hashes -r logunify-backend/requirements.lock
+      - uses: actions/setup-node@v4
+        with: {node-version: "22"}
+      - name: npm audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: logunify-dashboard
+
+  images:
+    runs-on: ubuntu-latest
+    needs: [backend, dashboard]
+    strategy:
+      matrix:
+        include:
+          - {name: backend, context: logunify-backend}
+          - {name: dashboard, context: logunify-dashboard}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          load: true
+          tags: logunify/${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - name: Image vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: logunify/${{ matrix.name }}:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: logunify/${{ matrix.name }}:ci
+          artifact-name: sbom-${{ matrix.name }}.spdx.json

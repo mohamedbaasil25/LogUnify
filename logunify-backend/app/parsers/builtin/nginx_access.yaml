@@ -1,0 +1,35 @@
+# nginx / Apache "combined" access log. A complete declarative parser: no Python needed to add a source like this.
+name: nginx_access
+version: "1.0.0"
+kind: regex
+description: nginx / Apache combined access log
+priority: 10
+sniff:
+  regex: '^\S+ \S+ \S+ \[\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] "'
+  confidence: 0.92
+match:
+  regex: '^(?P<client>\S+) \S+ (?P<user>\S+) \[(?P<ts>[^\]]+)\] "(?P<method>[A-Z]+) (?P<path>\S+)(?: (?P<proto>HTTP/[\d.]+))?" (?P<status>\d{3}) (?P<bytes>\d+|-)(?: "(?P<referrer>[^"]*)" "(?P<ua>[^"]*)")?'
+timestamp:
+  field: ts
+  format: "%d/%b/%Y:%H:%M:%S %z"
+message: "{method} {path} {status}"
+fields:
+  source.ip:                      {from: client, type: ip}
+  user.name:                      {from: user, drop_if: ["-"]}
+  http.request.method:            {from: method, transform: upper}
+  url.original:                   {from: path}
+  http.response.status_code:      {from: status, type: int}
+  http.response.body.bytes:       {from: bytes, type: int, drop_if: ["-"]}
+  http.request.referrer:          {from: referrer, drop_if: ["-"]}
+  user_agent.original:            {from: ua, drop_if: ["-"]}
+rules:
+  - when: {field: status, gte: 500}
+    set: {log.level: error}
+  - when: {field: status, gte: 400, lt: 500}
+    set: {log.level: warning}
+static:
+  event.kind: event
+  event.category: [web]
+  event.type: [access]
+  event.module: nginx
+  network.protocol: http

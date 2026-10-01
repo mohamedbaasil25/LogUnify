@@ -62,6 +62,30 @@ class AnomalyScorer:
         self._cache[key] = s
         return s
 
+    def score_many(self, rows: list[list[float]], learn: list[bool]) -> list[float]:
+        """Batch version of `score`: record the samples, maybe trigger one (re)fit, then score all rows in ONE forest call
+        (rows seen recently are served from the cache and not re-scored)."""
+        for features, do_learn in zip(rows, learn):
+            if do_learn:
+                self._data.append(features)
+                self._since_fit += 1
+        n = len(self._data)
+        if not self._fitting and any(learn) and ((self._model is None and n >= self.warmup) or
+                                                 (self._model is not None and self._since_fit >= self.refit_every)):
+            self.fit_async()
+        model = self._model
+        if model is None:
+            return [0.0] * len(rows)
+        keys = [tuple(round(x, 3) for x in r) for r in rows]
+        todo: dict[tuple, list[float]] = {k: r for k, r in zip(keys, rows) if k not in self._cache}
+        if todo:
+            raw = -model.forest.score_samples(np.asarray(list(todo.values()), dtype=float))
+            if len(self._cache) + len(todo) > 4096:
+                self._cache.clear()
+            for k, r in zip(todo, raw):
+                self._cache[k] = self._calibrate(float(r), model)
+        return [self._cache[k] for k in keys]
+
     @staticmethod
     def _calibrate(raw: float, m: _Model) -> float:
         x = (raw - m.med) / max(m.p99 - m.med, 1e-6)

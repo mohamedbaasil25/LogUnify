@@ -32,8 +32,15 @@ def throughput(window: int = Query(60, ge=1, le=900), m: MetricsRegistry = Depen
 
 @router.get("/dropped")
 def dropped(m: MetricsRegistry = Depends(get_metrics)):
+    """Logs REFUSED at the door (oversize, queue full): the sender was told. Not to be confused with dead-lettered logs."""
     total = sum(m.dropped.values())
     return {"total": total, "by_reason": dict(m.dropped)}
+
+
+@router.get("/dead-lettered")
+def dead_lettered(m: MetricsRegistry = Depends(get_metrics)):
+    """Logs accepted but not normalized (parse errors, internal errors, unpublishable): kept, replayable, never lost."""
+    return {"total": sum(m.dead_lettered.values()), "by_reason": dict(m.dead_lettered), "reconciliation": m.reconciliation()}
 
 
 @router.get("/compression")

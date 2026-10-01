@@ -28,7 +28,7 @@ from . import cert_in
 from .messages import Message, alert_summary, build_message, build_storm_message, build_test_message
 from .models import (ACTIVE, NOT_CLOSED, REPORT_CHANNELS, RESOLUTIONS, Alert, AlertNotFound, InvalidTransition)
 from .notifiers import DeliveryError, build_notifiers
-from .rules import AlertRules, Trigger
+from .rules import AlertRules
 from .store import AlertStore
 from .validation import parse_minutes
 

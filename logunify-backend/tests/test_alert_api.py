@@ -3,7 +3,6 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from app.alerting.models import ACTIVE
 from app.config import Settings
 from app.integrity.merkle import hash_record
 from app.intel.anomaly import AnomalyScorer
@@ -30,7 +29,7 @@ def env(tmp_path, monkeypatch):
     with TestClient(app) as c:
         app.state.pipeline.alerts.notifiers = [fake]
         c.headers.update({"X-API-Key": KEY})
-        monkeypatch.setattr(app.state.pipeline.intel.scorer, "score", lambda features, learn=True: 0.95)
+        monkeypatch.setattr(app.state.pipeline.intel.scorer, "score_many", lambda rows, learn: [0.95] * len(rows))
         monkeypatch.setattr(AnomalyScorer, "ready", property(lambda self: True))
         yield c, app, fake
 
@@ -108,9 +107,9 @@ def test_notifications_are_redacted_but_the_evidence_endpoint_keeps_the_unredact
 
 def test_nothing_fires_at_the_threshold_or_for_the_placeholder_tag(env, monkeypatch):
     c, app, fake = env
-    monkeypatch.setattr(app.state.pipeline.intel.scorer, "score", lambda features, learn=True: 0.9)
+    monkeypatch.setattr(app.state.pipeline.intel.scorer, "score_many", lambda rows, learn: [0.9] * len(rows))
     c.post("/api/v1/parse", json={"log": LOG})
-    monkeypatch.setattr(app.state.pipeline.intel.scorer, "score", lambda features, learn=True: 0.99)
+    monkeypatch.setattr(app.state.pipeline.intel.scorer, "score_many", lambda rows, learn: [0.99] * len(rows))
     c.post("/api/v1/parse", json={"log": "Quarterly frobnication of widget 7 started by operator ops-9"})   # no rule matches: T1078 fallback
     c.post("/api/v1/parse", json={"log": "Failed password for bob from 185.220.101.4 port 22 ssh2"})        # T1110: not critical
     time.sleep(0.3)
@@ -214,7 +213,7 @@ def test_persisted_alert_survives_an_application_restart(tmp_path, monkeypatch):
     fake = FakeNotifier()
     with TestClient(app1) as c:
         app1.state.pipeline.alerts.notifiers = [fake]
-        monkeypatch.setattr(app1.state.pipeline.intel.scorer, "score", lambda features, learn=True: 0.95)
+        monkeypatch.setattr(app1.state.pipeline.intel.scorer, "score_many", lambda rows, learn: [0.95] * len(rows))
         monkeypatch.setattr(AnomalyScorer, "ready", property(lambda self: True))
         c.headers.update({"X-API-Key": KEY})
         aid = raise_alert(c, fake)

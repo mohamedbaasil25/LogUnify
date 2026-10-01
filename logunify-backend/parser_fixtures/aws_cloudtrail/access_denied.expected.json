@@ -1,0 +1,29 @@
+{
+  "@timestamp": "2026-10-01T10:00:00+00:00",
+  "cloud.account.id": "123456789012",
+  "cloud.provider": "aws",
+  "cloud.region": "us-east-1",
+  "ecs.version": "8.11.0",
+  "event.action": "CreateUser",
+  "event.category": [
+    "api"
+  ],
+  "event.dataset": "logunify.aws_cloudtrail",
+  "event.kind": "event",
+  "event.module": "aws",
+  "event.original": "{\"eventTime\":\"2026-10-01T10:00:00Z\",\"eventSource\":\"iam.amazonaws.com\",\"eventName\":\"CreateUser\",\"awsRegion\":\"us-east-1\",\"sourceIPAddress\":\"203.0.113.7\",\"userAgent\":\"aws-cli/2.0\",\"recipientAccountId\":\"123456789012\",\"eventID\":\"abc-123\",\"userIdentity\":{\"userName\":\"alice\",\"principalId\":\"AIDAEXAMPLE\"},\"errorCode\":\"AccessDenied\",\"errorMessage\":\"User is not authorized\"}",
+  "event.outcome": "failure",
+  "event.provider": "iam.amazonaws.com",
+  "event.reason": "User is not authorized",
+  "event.type": [
+    "info"
+  ],
+  "labels.cloudtrail_event_id": "abc-123",
+  "logunify.parser.name": "aws_cloudtrail",
+  "logunify.source_format": "aws_cloudtrail",
+  "message": "CreateUser",
+  "source.ip": "203.0.113.7",
+  "user.id": "AIDAEXAMPLE",
+  "user.name": "alice",
+  "user_agent.original": "aws-cli/2.0"
+}

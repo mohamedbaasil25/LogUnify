@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.alerting import cert_in
 from app.alerting.cert_in import (ANNEXURE_I, OrgProfile, affected_asset, build_report, fmt_remaining, parse_ts,
                                   render_text, subject_line, suggest_types, ts_pair)
 from app.alerting.models import Alert

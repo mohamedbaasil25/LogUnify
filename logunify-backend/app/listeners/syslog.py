@@ -49,10 +49,12 @@ class _UdpProtocol(asyncio.DatagramProtocol):
 class SyslogListener:
     def __init__(self, submit: Submit, host: str = "127.0.0.1", udp_port: int | None = None, tcp_port: int | None = None,
                  hint: str | None = None, queue_max: int = 10_000, max_message_bytes: int = 8192,
-                 max_connections: int = 256, idle_timeout_s: float = 300.0, name: str = "syslog"):
+                 max_connections: int = 256, idle_timeout_s: float = 300.0, name: str = "syslog",
+                 submit_many: Callable[[list[bytes], str | None], Awaitable[int]] | None = None):
         if udp_port is None and tcp_port is None:
             raise ValueError("enable at least one of udp_port / tcp_port")
         self.submit, self.host, self.hint, self.name = submit, host, hint, name
+        self.submit_many = submit_many
         self.udp_port, self.tcp_port = udp_port, tcp_port
         self.max_msg, self.max_conns, self.idle = max_message_bytes, max_connections, idle_timeout_s
         self.queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=queue_max)
@@ -118,16 +120,29 @@ class SyslogListener:
             self.stats_c["queue_full_dropped"] += 1
 
     async def _drain_loop(self) -> None:
+        """Hand queued messages to the pipeline in batches (one broker round-trip per batch on Kafka)."""
         while True:
-            raw = await self.queue.get()
+            batch = [await self.queue.get()]
+            while len(batch) < 500:
+                try:
+                    batch.append(self.queue.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
             try:
-                if not await self.submit(raw, self.hint):
-                    self.stats_c["pipeline_rejected"] += 1     # oversize / bus full: the pipeline already counted the drop reason
+                if self.submit_many is not None:
+                    accepted = await self.submit_many(batch, self.hint)
+                    if accepted < len(batch):
+                        self.stats_c["pipeline_rejected"] += len(batch) - accepted    # the pipeline counted the reason
+                else:
+                    for raw in batch:
+                        if not await self.submit(raw, self.hint):
+                            self.stats_c["pipeline_rejected"] += 1
             except Exception:
-                self.stats_c["submit_errors"] += 1
-                log.exception("%s: submit failed; message dropped", self.name)
+                self.stats_c["submit_errors"] += len(batch)
+                log.exception("%s: submit failed; %d messages dropped", self.name, len(batch))
             finally:
-                self.queue.task_done()
+                for _ in batch:
+                    self.queue.task_done()
 
     # ---- TCP -----------------------------------------------------------------------------------------------------
     async def _on_connect(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

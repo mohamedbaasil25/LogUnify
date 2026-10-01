@@ -1,0 +1,1 @@
+{"eventTime":"2026-10-01T10:05:00Z","eventSource":"s3.amazonaws.com","eventName":"GetObject","awsRegion":"eu-west-1","sourceIPAddress":"s3.amazonaws.com","userIdentity":{"principalId":"svc"}}

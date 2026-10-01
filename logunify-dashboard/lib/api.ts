@@ -1,4 +1,4 @@
-import type { AuditResult, BatchList, LogSource, Metrics, ProofBundle, RecentLogs, SourceCreate, ThroughputSeries, VerifyResult } from "./types";
+import type { ParserInfo, AuditResult, BatchList, LogSource, Metrics, ProofBundle, RecentLogs, SourceCreate, ThroughputSeries, VerifyResult } from "./types";
 
 /** Errors carry the backend's message (FastAPI `detail`, string or validation list). */
 export class ApiError extends Error {
@@ -60,6 +60,7 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
+  parsers: (signal?: AbortSignal) => request<{ items: ParserInfo[]; errors: string[] }>("/api/v1/parsers", { signal }),
   sources: (signal?: AbortSignal) => request<{ items: LogSource[] }>("/api/v1/sources", { signal }),
   createSource: (body: SourceCreate) =>
     request<LogSource>("/api/v1/sources", {

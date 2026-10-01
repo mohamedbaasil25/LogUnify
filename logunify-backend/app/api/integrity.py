@@ -1,5 +1,4 @@
 import hmac
-import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query

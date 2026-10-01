@@ -11,7 +11,7 @@ raw logs ──► Kafka  logunify.raw ──► Pipeline: detect → parse → 
 ## Run
 ```bash
 pip install -r requirements.txt
-python -m uvicorn app.main:app --reload        # in-memory bus + built-in mock generator, no Kafka needed
+LOGUNIFY_MOCK_ENABLED=true python -m uvicorn app.main:app --reload   # in-memory bus + demo traffic generator (off by default), no Kafka needed
 python -m pytest
 ```
 Docs: http://localhost:8000/docs
@@ -143,3 +143,9 @@ Sources, IOC feeds, Merkle batches + anchors and recent logs survive restarts (a
 
 ## Elasticsearch forwarding (`app/forwarding`)
 Async Bulk API forwarder (aiohttp) with retries, idempotent ids and a dead-letter file. See [docs/FORWARDING.md](docs/FORWARDING.md).
+
+## Pipeline guarantees (`docs/PIPELINE.md`)
+Envelope (`event.id`, `event.hash`, source, parser version) on every record, an encrypted raw archive and `GET /api/v1/trace/{event.id}`; dead-letter store and
+reconciliation counters instead of dropping; Kafka at-least-once with `acks=all` and commit-after-ack; a parser SDK (declarative YAML, plugins, golden fixtures,
+`python -m app.parsers.cli`); ECS validation and a unified event taxonomy; live log push (SSE `/api/v1/stream/logs`); worker ids for scale-out. Benchmarks:
+`scripts/bench_pipeline.py`, `scripts/load_test_kafka.py`.

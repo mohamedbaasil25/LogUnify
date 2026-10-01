@@ -11,13 +11,7 @@ const TYPES: { value: SourceType; label: string; icon: typeof Radio; hint: strin
   { value: "api", label: "API pull", icon: Plug, hint: "LogUnify polls a vendor REST API" },
 ];
 
-const FORMATS: { value: SourceFormat; label: string }[] = [
-  { value: "auto", label: "Auto-detect" },
-  { value: "syslog", label: "Syslog (RFC 3164/5424)" },
-  { value: "json", label: "JSON" },
-  { value: "cef", label: "CEF" },
-  { value: "text", label: "Plain text" },
-];
+const AUTO_FORMAT = { value: "auto", label: "Auto-detect" };
 
 const input = "w-full rounded border border-line bg-bg px-3 py-2 text-sm placeholder:text-mute";
 const labelCls = "mb-1 block text-xs font-medium uppercase tracking-wider text-mute";
@@ -103,6 +97,12 @@ export default function SourceConfigurator({ onClose, onCreated }: { onClose: ()
   const [type, setType] = useState<SourceType>("syslog");
   const [name, setName] = useState("");
   const [format, setFormat] = useState<SourceFormat>("auto");
+  const [tz, setTz] = useState("");
+  const [formats, setFormats] = useState<{ value: string; label: string }[]>([AUTO_FORMAT]);
+
+  useEffect(() => {
+    api.parsers().then((r) => setFormats([AUTO_FORMAT, ...r.items.map((p) => ({ value: p.name, label: `${p.name} (v${p.version})` }))])).catch(() => {});
+  }, []);
   const [tags, setTags] = useState("");
   const [protocol, setProtocol] = useState<"udp" | "tcp">("udp");
   const [port, setPort] = useState("5514");
@@ -166,6 +166,7 @@ export default function SourceConfigurator({ onClose, onCreated }: { onClose: ()
       type,
       format,
       tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+      ...(tz.trim() && { timezone: tz.trim() }),
       ...(type === "syslog" && { protocol, port: Number(port) }),
       ...(type === "api" && { url: url.trim(), poll_interval_s: Number(interval) || 60 }),
     };
@@ -235,10 +236,15 @@ export default function SourceConfigurator({ onClose, onCreated }: { onClose: ()
               <div>
                 <label htmlFor="src-format" className={labelCls}>Log format</label>
                 <select id="src-format" value={format} onChange={(e) => setFormat(e.target.value as SourceFormat)} className={input}>
-                  {FORMATS.map((f) => (
+                  {formats.map((f) => (
                     <option key={f.value} value={f.value}>{f.label}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label htmlFor="src-tz" className={labelCls}>Timestamp time zone (optional)</label>
+                <input id="src-tz" value={tz} onChange={(e) => setTz(e.target.value)} placeholder="UTC, or e.g. Asia/Kolkata" className={input} />
+                <p className="mt-1 text-xs text-mute">For logs whose timestamps carry no UTC offset (most syslog).</p>
               </div>
               <div>
                 <label htmlFor="src-tags" className={labelCls}>Tags (comma-separated)</label>

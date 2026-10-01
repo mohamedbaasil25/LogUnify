@@ -8,7 +8,6 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.compliance import report
 from app.compliance.durations import to_days
 from app.compliance.pdf import Pdf
 from app.compliance.retention import live_elasticsearch, static_proof

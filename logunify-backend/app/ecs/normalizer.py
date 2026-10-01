@@ -13,24 +13,58 @@ _LEVEL_TO_SEV = {"emergency": 0, "alert": 1, "critical": 2, "fatal": 2, "error":
                  "warning": 4, "warn": 4, "notice": 5, "info": 6, "debug": 7}
 
 
-def to_iso(ts: Any, now: datetime | None = None) -> str:
-    """Best-effort conversion to ISO-8601 UTC; falls back to ingest time."""
+def _zone(name: str | None):
+    if not name or name.upper() == "UTC":
+        return timezone.utc
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(name)
+    except Exception:                       # unknown zone or no tz database: UTC is the safe, visible fallback
+        return timezone.utc
+
+
+def parse_ts(ts: Any, now: datetime | None = None, tz: str | None = None) -> tuple[str, str | None]:
+    """-> (ISO-8601 UTC string, note). note: None = the source gave an unambiguous instant; 'assumed:<zone>' = it gave local time
+    with no offset and we interpreted it in `tz` (default UTC); 'missing' / 'unparseable' = we fell back to `now`.
+
+    RFC 3164 has no year: the year is chosen so the result is closest to `now` (a December log arriving in January is last year,
+    not next year).
+    """
     now = now or datetime.now(timezone.utc)
     if ts is None:
-        return now.isoformat()
+        return now.isoformat(), "missing"
+    zone = _zone(tz)
+    zname = tz if zone is not timezone.utc and tz else "UTC"
     try:
         if isinstance(ts, (int, float)) or (isinstance(ts, str) and ts.replace(".", "", 1).isdigit()):
             v = float(ts)
             v = v / 1000 if v > 1e11 else v
-            return datetime.fromtimestamp(v, timezone.utc).isoformat()
+            return datetime.fromtimestamp(v, timezone.utc).isoformat(), None
         s = str(ts).strip()
         if _SYS_TS.match(s):
-            dt = datetime.strptime(f"{now.year} {' '.join(s.split())}", "%Y %b %d %H:%M:%S")
-            return dt.replace(tzinfo=timezone.utc).isoformat()
+            md = ' '.join(s.split())
+            best = None
+            for y in (now.year - 1, now.year, now.year + 1):
+                try:
+                    dt = datetime.strptime(f"{y} {md}", "%Y %b %d %H:%M:%S").replace(tzinfo=zone)
+                except ValueError:                      # Feb 29 in a non-leap year
+                    continue
+                if best is None or abs((dt - now).total_seconds()) < abs((best - now).total_seconds()):
+                    best = dt
+            if best is None:
+                return now.isoformat(), "unparseable"
+            return best.astimezone(timezone.utc).isoformat(), f"assumed:{zname}"
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).isoformat()
+        if dt.tzinfo:
+            return dt.astimezone(timezone.utc).isoformat(), None
+        return dt.replace(tzinfo=zone).astimezone(timezone.utc).isoformat(), f"assumed:{zname}"
     except (ValueError, OverflowError, OSError):
-        return now.isoformat()
+        return now.isoformat(), "unparseable"
+
+
+def to_iso(ts: Any, now: datetime | None = None, tz: str | None = None) -> str:
+    """Best-effort conversion to ISO-8601 UTC; falls back to `now`."""
+    return parse_ts(ts, now, tz)[0]
 
 
 def _nest(flat: dict[str, Any]) -> dict:
@@ -52,7 +86,7 @@ def _nest(flat: dict[str, Any]) -> dict:
     return root
 
 
-def to_ecs(p: ParsedLog, now: datetime | None = None) -> dict:
+def to_ecs(p: ParsedLog, now: datetime | None = None, tz: str | None = None, received: datetime | None = None) -> dict:
     f = dict(p.fields)
     for k in ("source.ip", "destination.ip"):      # drop invalid IPs rather than break ES mappings later
         if k in f:
@@ -68,7 +102,13 @@ def to_ecs(p: ParsedLog, now: datetime | None = None) -> dict:
     f["event.original"] = p.original
     f["event.dataset"] = f"logunify.{p.format}"
     f["event.ingested"] = (now or datetime.now(timezone.utc)).isoformat()
-    f["@timestamp"] = to_iso(p.timestamp, now)
+    iso, note = parse_ts(p.timestamp, received or now, tz)         # no event time at all: the time we received it, flagged below
+    f["@timestamp"] = iso
+    if note:
+        if note.startswith("assumed:"):
+            f["event.timezone"] = note.split(":", 1)[1]
+        else:
+            f["logunify.timestamp.source"] = "received" if note == "missing" else "received_unparseable"
     f["ecs.version"] = ECS_VERSION
     f["logunify.source_format"] = p.format
     if p.message is not None:

@@ -23,9 +23,11 @@ export interface EcsDoc {
   source?: { ip?: string; port?: number; geo?: { country_iso_code?: string; country_name?: string } };
   host?: { name?: string };
   observer?: { vendor?: string; product?: string };
-  event?: { action?: string; reason?: string; dataset?: string; ingested?: string; original?: string };
+  event?: { id?: string; hash?: string; action?: string; reason?: string; dataset?: string; ingested?: string; original?: string };
   logunify?: {
     source_format?: string;
+    parser?: { name?: string; version?: string };
+    raw?: { redacted?: boolean };
     anomaly?: { score?: number; model_ready?: boolean };
     template?: { id?: number; text?: string };
     ti?: { matched?: boolean; match_count?: number; matched_field?: string; matches?: { type: string; value: string; feed: string; field: string }[] };
@@ -69,7 +71,15 @@ export interface BatchList {
 }
 
 export type SourceType = "syslog" | "http" | "api";
-export type SourceFormat = "auto" | "syslog" | "json" | "cef" | "text";
+/** "auto" or the name of a parser registered on the backend (GET /api/v1/parsers): not a fixed list. */
+export type SourceFormat = string;
+
+export interface ParserInfo {
+  name: string;
+  version: string;
+  kind: string;
+  description: string;
+}
 
 export interface LogSource {
   id: string;
@@ -94,6 +104,7 @@ export interface SourceCreate {
   port?: number;
   url?: string;
   poll_interval_s?: number;
+  timezone?: string;
 }
 
 export interface ProofStep {

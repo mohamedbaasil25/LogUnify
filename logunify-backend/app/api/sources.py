@@ -1,4 +1,3 @@
-import hmac
 import ipaddress
 from typing import Literal
 from urllib.parse import urlparse
@@ -21,7 +20,7 @@ def get_registry(request: Request) -> SourceRegistry:
 class SourceCreate(BaseModel):
     name: str = Field(min_length=2, max_length=64, pattern=r"^[\w .\-]+$")
     type: Literal["syslog", "http", "api"]
-    format: Literal["auto", "syslog", "json", "cef", "text"] = "auto"
+    format: str = Field("auto", pattern=r"^(auto|[a-z][a-z0-9_]{1,40})$")      # "auto" or a parser name (see /api/v1/parsers)
     tags: list[str] = Field(default_factory=list, max_length=10)
     # syslog listener
     protocol: Literal["udp", "tcp"] = "udp"
@@ -29,6 +28,20 @@ class SourceCreate(BaseModel):
     # api poller
     url: str | None = Field(None, max_length=512)
     poll_interval_s: int = Field(60, ge=10, le=86400)
+    # how to read timestamps that carry no UTC offset (most syslog): an IANA zone such as "Asia/Kolkata"; default UTC
+    timezone: str | None = Field(None, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def _tz(cls, v):
+        if v in (None, "", "UTC"):
+            return None
+        try:
+            from zoneinfo import ZoneInfo
+            ZoneInfo(v)
+        except Exception:
+            raise ValueError("unknown IANA time zone (e.g. Asia/Kolkata)") from None
+        return v
 
     @field_validator("tags")
     @classmethod
@@ -51,7 +64,7 @@ def _validate_url(url: str | None) -> str:
             raise HTTPException(422, "API feed URL must not target a private or loopback address")
     except ValueError:
         if u.hostname.lower() in {"localhost"} or u.hostname.lower().endswith((".local", ".internal")):
-            raise HTTPException(422, "API feed URL must not target an internal host")
+            raise HTTPException(422, "API feed URL must not target an internal host") from None
     return url
 
 
@@ -67,8 +80,11 @@ def list_sources(reg: SourceRegistry = Depends(get_registry)):
 
 
 @router.post("", status_code=201, dependencies=[Depends(guard("admin", "sources.create"))])
-async def create_source(req: SourceCreate, request: Request, reg: SourceRegistry = Depends(get_registry)):
+async def create_source(req: SourceCreate, request: Request, reg: SourceRegistry = Depends(get_registry),
+                        pipeline: Pipeline = Depends(get_pipeline)):
     """Register a feed. The HTTP token is returned only in this response."""
+    if req.format != "auto" and pipeline.parsers.get(req.format) is None:
+        raise HTTPException(422, f"unknown parser '{req.format}'; available: {', '.join(pipeline.parsers.names())}")
     if req.type == "syslog":
         if req.port is None:
             raise HTTPException(422, "syslog feeds need a port")
@@ -77,10 +93,12 @@ async def create_source(req: SourceCreate, request: Request, reg: SourceRegistry
         cfg = {"url": _validate_url(req.url), "poll_interval_s": req.poll_interval_s}
     else:
         cfg = {}
+    if req.timezone:
+        cfg["timezone"] = req.timezone
     try:
         src = reg.add(req.name.strip(), req.type, req.format, cfg, req.tags)
     except ValueError as e:
-        raise HTTPException(409, str(e))
+        raise HTTPException(409, str(e)) from None
     if src.type == "syslog":
         try:
             await request.app.state.listeners.start_source(src)
@@ -101,15 +119,14 @@ async def delete_source(sid: str, request: Request, reg: SourceRegistry = Depend
 
 
 @router.post("/{sid}/ingest", status_code=202)
-async def ingest(sid: str, body: IngestBody, x_source_token: str = Header(""),
+async def ingest(sid: str, body: IngestBody, request: Request, x_source_token: str = Header(""),
                  reg: SourceRegistry = Depends(get_registry), p: Pipeline = Depends(get_pipeline)):
     """Push logs into the pipeline through an HTTP feed. Auth: `X-Source-Token` header."""
     src = reg.get(sid)
     if src is None or src.type != "http" or not src.check_token(x_source_token):
         raise HTTPException(401, "invalid source or token")     # same answer for unknown id / bad token
     hint = None if src.format == "auto" else src.format
-    accepted = 0
-    for line in body.logs:
-        accepted += await p.submit(line.encode(), hint)
+    accepted = await p.submit_many([line.encode() for line in body.logs], hint, source_id=src.id, transport="http",
+                                   tz=src.config.get("timezone"), peer=request.client.host if request.client else None)
     src.received += accepted
     return {"submitted": len(body.logs), "accepted": accepted}

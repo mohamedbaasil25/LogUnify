@@ -14,3 +14,5 @@ class ParsedLog:
     timestamp: str | None = None
     message: str | None = None
     fields: dict[str, Any] = field(default_factory=dict)  # dotted ECS field names
+    parser: str = ""              # registry name + version of the parser that produced this (set by the registry)
+    parser_version: str = ""

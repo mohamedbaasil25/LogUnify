@@ -1,0 +1,25 @@
+{
+  "@timestamp": "2026-10-01T10:00:00+00:00",
+  "ecs.version": "8.11.0",
+  "event.category": [
+    "web"
+  ],
+  "event.dataset": "logunify.nginx_access",
+  "event.kind": "event",
+  "event.module": "nginx",
+  "event.original": "203.0.113.9 - - [01/Oct/2026:10:00:00 +0000] \"POST /login HTTP/2.0\" 200 - \"https://example.org/\" \"Mozilla/5.0\"",
+  "event.outcome": "success",
+  "event.type": [
+    "access"
+  ],
+  "http.request.method": "POST",
+  "http.request.referrer": "https://example.org/",
+  "http.response.status_code": 200,
+  "logunify.parser.name": "nginx_access",
+  "logunify.source_format": "nginx_access",
+  "message": "POST /login 200",
+  "network.protocol": "http",
+  "source.ip": "203.0.113.9",
+  "url.original": "/login",
+  "user_agent.original": "Mozilla/5.0"
+}

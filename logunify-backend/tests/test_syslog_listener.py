@@ -217,7 +217,7 @@ def test_end_to_end_into_pipeline():
         await p.start()
         lst = await listener(p.submit, udp_port=None)
         await tcp_send(lst.bound["tcp"], M3164 + b"\n" + M5424 + b"\n" + b"<13>not really valid syslog?\n")
-        await wait_for(lambda: p.metrics.processed == 2 and sum(p.metrics.dropped.values()) == 1)   # invalid line -> parse_error drop
+        await wait_for(lambda: p.metrics.processed == 2 and sum(p.metrics.dead_lettered.values()) == 1)   # invalid line -> dead-lettered, not dropped
         await lst.stop()
         await p.stop()
         docs = list(p.recent)

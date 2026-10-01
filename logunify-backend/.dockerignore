@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+data/
+tests/
+scripts/
+docs/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.db
+*.jsonl

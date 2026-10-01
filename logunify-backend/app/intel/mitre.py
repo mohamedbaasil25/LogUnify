@@ -33,7 +33,7 @@ def _rx(pattern: str) -> Callable[[dict, str], bool]:
 
 def _auth(outcome: str, external_source: bool = False) -> Callable[[dict, str], bool]:
     def check(fields: dict, _text: str) -> bool:
-        ok = fields.get("event.outcome") == outcome and fields.get("event.category") == "authentication"
+        ok = fields.get("event.outcome") == outcome and "authentication" in ([cat] if isinstance((cat := fields.get("event.category")), str) else (cat or []))
         return ok and (is_external(fields.get("source.ip")) if external_source else ok)
     return check
 

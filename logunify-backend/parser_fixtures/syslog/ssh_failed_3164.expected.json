@@ -1,0 +1,30 @@
+{
+  "@timestamp": "2026-10-11T22:14:15+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "logon-failed",
+  "event.category": [
+    "authentication"
+  ],
+  "event.dataset": "logunify.syslog",
+  "event.kind": "event",
+  "event.module": "syslog",
+  "event.original": "<38>Oct 11 22:14:15 web-01 sshd[41]: Failed password for bob from 185.220.101.4 port 22 ssh2",
+  "event.outcome": "failure",
+  "event.severity": 6,
+  "event.timezone": "UTC",
+  "event.type": [
+    "start"
+  ],
+  "host.name": "web-01",
+  "log.level": "info",
+  "log.syslog.facility.code": 4,
+  "log.syslog.facility.name": "auth",
+  "log.syslog.priority": 38,
+  "logunify.parser.name": "syslog",
+  "logunify.source_format": "syslog",
+  "message": "Failed password for bob from 185.220.101.4 port 22 ssh2",
+  "process.name": "sshd",
+  "process.pid": 41,
+  "source.ip": "185.220.101.4",
+  "user.name": "bob"
+}

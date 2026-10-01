@@ -1,0 +1,1 @@
+{"eventTime":"2026-10-01T10:00:00Z","eventSource":"iam.amazonaws.com","eventName":"CreateUser","awsRegion":"us-east-1","sourceIPAddress":"203.0.113.7","userAgent":"aws-cli/2.0","recipientAccountId":"123456789012","eventID":"abc-123","userIdentity":{"userName":"alice","principalId":"AIDAEXAMPLE"},"errorCode":"AccessDenied","errorMessage":"User is not authorized"}

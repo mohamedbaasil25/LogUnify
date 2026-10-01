@@ -1,0 +1,23 @@
+{
+  "@timestamp": "2026-10-01T10:05:00+00:00",
+  "cloud.provider": "aws",
+  "cloud.region": "eu-west-1",
+  "ecs.version": "8.11.0",
+  "event.action": "GetObject",
+  "event.category": [
+    "api"
+  ],
+  "event.dataset": "logunify.aws_cloudtrail",
+  "event.kind": "event",
+  "event.module": "aws",
+  "event.original": "{\"eventTime\":\"2026-10-01T10:05:00Z\",\"eventSource\":\"s3.amazonaws.com\",\"eventName\":\"GetObject\",\"awsRegion\":\"eu-west-1\",\"sourceIPAddress\":\"s3.amazonaws.com\",\"userIdentity\":{\"principalId\":\"svc\"}}",
+  "event.outcome": "success",
+  "event.provider": "s3.amazonaws.com",
+  "event.type": [
+    "info"
+  ],
+  "logunify.parser.name": "aws_cloudtrail",
+  "logunify.source_format": "aws_cloudtrail",
+  "message": "GetObject",
+  "user.id": "svc"
+}

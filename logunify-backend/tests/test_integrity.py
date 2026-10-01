@@ -11,7 +11,7 @@ from app.config import Settings
 from app.integrity.batcher import BatchBuilder
 from app.integrity.cli import main as cli_main
 from app.integrity.ledger import MockFabricLedger
-from app.integrity.merkle import (LEAF_PREFIX, NODE_PREFIX, build_tree, canonical, compute_root, hash_record,
+from app.integrity.merkle import (LEAF_PREFIX, NODE_PREFIX, build_tree, canonical, hash_record,
                                   make_proof, merkle_root, verify_proof)
 from app.main import create_app
 

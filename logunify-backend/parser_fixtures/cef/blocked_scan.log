@@ -1,0 +1,1 @@
+CEF:0|Acme|IDS|1.0|100|scan detected|5|src=10.0.0.1 dst=10.0.0.2 dpt=22 act=blocked

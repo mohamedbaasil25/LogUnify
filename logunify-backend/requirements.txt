@@ -1,11 +1,2 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-pydantic>=2.7
-pydantic-settings>=2.3
-aiokafka>=0.11
-drain3>=0.9.11
-scikit-learn>=1.4
-numpy>=1.26
-pytest>=8.0
-httpx>=0.27
-aiosqlite>=0.20
+# Development install (runtime + test tools). Production uses the hash-pinned requirements.lock via the Dockerfile.
+-r requirements-dev.txt

@@ -64,14 +64,15 @@ def test_ingest_roundtrip_and_metrics(client):
     assert r.status_code == 202 and r.json()["accepted"] == 5
     for _ in range(50):
         if client.get("/api/v1/metrics").json()["received"] >= 5 and \
-           client.get("/api/v1/metrics").json()["processed"] + client.get("/api/v1/metrics/dropped").json()["total"] >= 5:
+           client.get("/api/v1/metrics").json()["processed"] + client.get("/api/v1/metrics/dead-lettered").json()["total"] >= 5:
             break
         time.sleep(0.05)
     m = client.get("/api/v1/metrics").json()
-    assert m["processed"] == 4 and m["dropped"] == 1
+    assert m["processed"] == 4 and m["dropped"] == 0 and m["dead_lettered"] == 1   # the garbage line is kept, not dropped
+    assert m["reconciliation"]["unaccounted"] == 0
     assert m["by_format"] == {"syslog": 2, "cef": 1, "json": 1}
     assert m["compression_ratio"] > 0
-    assert client.get("/api/v1/metrics/dropped").json()["by_reason"]
+    assert client.get("/api/v1/metrics/dead-lettered").json()["by_reason"]
     assert len(client.get("/api/v1/logs/recent?limit=10").json()["items"]) == 4
     assert client.get("/api/v1/logs/recent?format=cef").json()["count"] == 1
     assert len(client.get("/api/v1/metrics/throughput?window=10").json()["series"]) == 10

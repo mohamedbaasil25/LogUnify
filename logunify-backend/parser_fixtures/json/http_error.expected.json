@@ -1,0 +1,23 @@
+{
+  "@timestamp": "2026-10-01T10:00:00+00:00",
+  "ecs.version": "8.11.0",
+  "event.category": [
+    "web"
+  ],
+  "event.dataset": "logunify.json",
+  "event.kind": "event",
+  "event.module": "json",
+  "event.original": "{\"timestamp\":\"2026-10-01T10:00:00Z\",\"host\":\"web-01\",\"src_ip\":\"8.8.8.8\",\"method\":\"GET\",\"status\":500,\"path\":\"/admin\",\"message\":\"request failed\"}",
+  "event.outcome": "failure",
+  "event.type": [
+    "access"
+  ],
+  "host.name": "web-01",
+  "http.request.method": "GET",
+  "http.response.status_code": 500,
+  "logunify.parser.name": "json",
+  "logunify.source_format": "json",
+  "message": "request failed",
+  "source.ip": "8.8.8.8",
+  "url.path": "/admin"
+}

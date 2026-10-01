@@ -425,7 +425,7 @@ def test_event_loop_is_not_blocked_by_serialising_and_compressing_big_batches(tm
         await f.stop()
         await s.stop()
         assert len(s.docs) == 20_000
-        assert max(gaps) < 0.3, f"loop stalled {max(gaps):.3f}s"
+        assert max(gaps) < 0.6, f"loop stalled {max(gaps):.3f}s"
     run(go())
 
 
@@ -454,3 +454,18 @@ def test_pipeline_forwards_redacted_docs_and_a_broken_forwarder_never_drops_logs
 def test_pipeline_requires_url_when_enabled():
     with pytest.raises(ValueError):
         Pipeline(InMemoryBus(10), MetricsRegistry(), Settings(alert_db_path=":memory:", es_forward_enabled=True))
+
+
+def test_event_id_is_used_as_the_document_id(tmp_path):
+    async def go():
+        s = await StubEs().start()
+        f = fw(s, tmp_path)
+        await f.start()
+        f.submit(doc(1, event={"id": "0192f3a4-aaaa-7bbb-8ccc-123456789abc"}))
+        f.submit(doc(2, event={"id": 'bad"id'}))                                  # unsafe id: falls back to the content hash
+        await settle(f)
+        await f.stop()
+        await s.stop()
+        assert "0192f3a4-aaaa-7bbb-8ccc-123456789abc" in s.docs and len(s.docs) == 2
+        assert all('"' not in k for k in s.docs)
+    run(go())

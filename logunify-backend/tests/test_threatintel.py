@@ -49,7 +49,7 @@ def test_enrich_ip_domain_hash_in_message_and_fields():
     assert t.enrich(p) and p.fields["threat.indicator.type"] == "domain-name"
 
     p = parse_auto(f"Process created image hash {MOCK_HASHES[0].upper()}")
-    assert t.enrich(p) and p.fields[f"threat.indicator.file.hash.sha256"] == MOCK_HASHES[0]
+    assert t.enrich(p) and p.fields["threat.indicator.file.hash.sha256"] == MOCK_HASHES[0]
 
     p = parse_auto(json.dumps({"message": "x", "src_ip": MOCK_IPS[1]}))          # structured field, not text
     assert t.enrich(p) and p.fields["logunify.ti.matched_field"] == "source.ip"
