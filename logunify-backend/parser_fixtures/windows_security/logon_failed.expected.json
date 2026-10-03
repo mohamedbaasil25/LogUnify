@@ -1,0 +1,30 @@
+{
+  "@timestamp": "2026-10-01T09:15:42+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "logon-failed",
+  "event.category": [
+    "authentication"
+  ],
+  "event.code": 4625,
+  "event.dataset": "logunify.windows_security",
+  "event.kind": "event",
+  "event.module": "windows",
+  "event.original": "{\"EventTime\":\"2026-10-01 09:15:42\",\"Hostname\":\"dc01\",\"Computer\":\"DC01.corp.example.com\",\"Channel\":\"Security\",\"EventID\":4625,\"SourceName\":\"Microsoft-Windows-Security-Auditing\",\"TargetUserName\":\"administrator\",\"TargetDomainName\":\"CORP\",\"LogonType\":3,\"IpAddress\":\"203.0.113.50\",\"IpPort\":\"51422\",\"WorkstationName\":\"KALI\",\"Status\":\"0xc000006d\",\"Message\":\"An account failed to log on.\"}",
+  "event.outcome": "failure",
+  "event.provider": "Microsoft-Windows-Security-Auditing",
+  "event.timezone": "UTC",
+  "event.type": [
+    "start"
+  ],
+  "host.name": "DC01.corp.example.com",
+  "labels.logon_type": 3,
+  "labels.status": "0xc000006d",
+  "labels.workstation": "KALI",
+  "logunify.parser.name": "windows_security",
+  "logunify.source_format": "windows_security",
+  "message": "An account failed to log on.",
+  "source.ip": "203.0.113.50",
+  "source.port": 51422,
+  "user.domain": "CORP",
+  "user.name": "administrator"
+}

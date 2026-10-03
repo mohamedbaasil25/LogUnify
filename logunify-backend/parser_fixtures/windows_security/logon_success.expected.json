@@ -1,0 +1,27 @@
+{
+  "@timestamp": "2026-10-01T09:16:10+00:00",
+  "ecs.version": "8.11.0",
+  "event.category": [
+    "authentication"
+  ],
+  "event.code": 4624,
+  "event.dataset": "logunify.windows_security",
+  "event.kind": "event",
+  "event.module": "windows",
+  "event.original": "{\"EventTime\":\"2026-10-01 09:16:10\",\"Computer\":\"WS-0042.corp.example.com\",\"Channel\":\"Security\",\"EventID\":4624,\"SourceName\":\"Microsoft-Windows-Security-Auditing\",\"TargetUserName\":\"asmith\",\"TargetDomainName\":\"CORP\",\"LogonType\":10,\"IpAddress\":\"10.1.2.30\",\"IpPort\":\"49812\",\"Message\":\"An account was successfully logged on.\"}",
+  "event.outcome": "success",
+  "event.provider": "Microsoft-Windows-Security-Auditing",
+  "event.timezone": "UTC",
+  "event.type": [
+    "start"
+  ],
+  "host.name": "WS-0042.corp.example.com",
+  "labels.logon_type": 10,
+  "logunify.parser.name": "windows_security",
+  "logunify.source_format": "windows_security",
+  "message": "An account was successfully logged on.",
+  "source.ip": "10.1.2.30",
+  "source.port": 49812,
+  "user.domain": "CORP",
+  "user.name": "asmith"
+}

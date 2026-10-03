@@ -1,0 +1,23 @@
+{
+  "@timestamp": "2026-10-01T02:03:04+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "audit-log-cleared",
+  "event.category": [
+    "configuration"
+  ],
+  "event.code": 1102,
+  "event.dataset": "logunify.windows_security",
+  "event.kind": "event",
+  "event.module": "windows",
+  "event.original": "{\"EventTime\":\"2026-10-01 02:03:04\",\"Computer\":\"SRV-DB1.corp.example.com\",\"Channel\":\"Security\",\"EventID\":1102,\"SourceName\":\"Microsoft-Windows-Eventlog\",\"SubjectUserName\":\"backdoor\",\"Message\":\"The audit log was cleared.\"}",
+  "event.provider": "Microsoft-Windows-Eventlog",
+  "event.timezone": "UTC",
+  "event.type": [
+    "change"
+  ],
+  "host.name": "SRV-DB1.corp.example.com",
+  "labels.subject_user": "backdoor",
+  "logunify.parser.name": "windows_security",
+  "logunify.source_format": "windows_security",
+  "message": "The audit log was cleared."
+}

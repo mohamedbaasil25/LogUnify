@@ -1,0 +1,1 @@
+date=2026-10-01 time=11:25:00 devname="FG-HQ-01" devid="FGT60F0000" logid="0419016384" type="utm" subtype="ips" level="alert" srcip=198.51.100.9 dstip=10.0.5.20 srcport=40000 dstport=443 proto=6 action="dropped" policyid=3 msg="web_server: SQL.Injection"
