@@ -87,6 +87,9 @@ services:
       LOGUNIFY_JWT_AUDIENCE: ${LOGUNIFY_JWT_AUDIENCE:-}
       LOGUNIFY_JWT_ROLES_CLAIM: ${LOGUNIFY_JWT_ROLES_CLAIM:-roles}
       LOGUNIFY_STATE_DB_PATH: /data/{worker}/state.db    # {worker} -> the id above: replicas never share a SQLite file
+      LOGUNIFY_ALERT_SCORE_THRESHOLD: ${LOGUNIFY_ALERT_SCORE_THRESHOLD:-0.9}          # set in .env, restart; confirm with GET /api/v1/alerts/config (docs/WINDOWS_SECURITY.md 8b)
+      LOGUNIFY_ALERT_DEDUP_MINUTES: ${LOGUNIFY_ALERT_DEDUP_MINUTES:-30}
+      LOGUNIFY_ALERT_MAX_NOTIFICATIONS_PER_HOUR: ${LOGUNIFY_ALERT_MAX_NOTIFICATIONS_PER_HOUR:-20}
       LOGUNIFY_ALERT_SLACK_WEBHOOK_URL: ${LOGUNIFY_ALERT_SLACK_WEBHOOK_URL:-}
       LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL: ${LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL:-}
       LOGUNIFY_STATE_DATABASE_URL: ${LOGUNIFY_STATE_DATABASE_URL:-}   # postgresql://... : state in one shared PostgreSQL (schema per replica) instead of the file above

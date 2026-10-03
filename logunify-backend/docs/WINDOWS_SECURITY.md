@@ -191,7 +191,7 @@ What a day CAN legitimately give you:
 3. **A handful of real actions on `WinServer-01`** (a failed logon, lock / unlock) are fine: they are a few real events. Do not script them into the thousands, and **do not clear the Security log on the real server**
    (it destroys evidence and trips the log-cleared alert and its CERT-In clock): use a lab machine for that drill.
 4. **A provisional decision.** Pick the lowest threshold in the sweep whose preview rows you would act on and whose projected volume fits your capacity; write down "provisional, review on <date + 7 days>" and what you will check
-   (alerts per day, false-positive rate once 20+ alerts are closed). The hourly notification cap (`LOGUNIFY_ALERT_MAX_NOTIFICATIONS_PER_HOUR`, default 20) limits a storm while the threshold is unproven.
+   (alerts per day, false-positive rate once 20+ alerts are closed). **Record only numbers you read off the page**: a sign-off built on assumed figures is worse than none. After changing `LOGUNIFY_ALERT_SCORE_THRESHOLD` in `.env` and restarting, confirm it took effect with `GET /api/v1/alerts/config` (`score_threshold`); a setting the container does not receive fails silently. The hourly notification cap (`LOGUNIFY_ALERT_MAX_NOTIFICATIONS_PER_HOUR`, default 20) limits a storm while the threshold is unproven.
 
 ## 9. Before real data: remove synthetic data
 `scripts/send_windows_samples.py` exists to smoke-test the path. Only ever send it to a source tagged `synthetic` (section 8b) or to a scratch instance; if you pointed it at an untagged source of the instance you calibrate on, delete the source, stop the service, remove `state.db` (and the alert DB if
