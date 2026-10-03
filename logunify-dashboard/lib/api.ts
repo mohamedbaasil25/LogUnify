@@ -1,3 +1,4 @@
+import type { AlertEvent, AlertSummary, AlertView, AuditRow, CertReport, ComplianceReport, DlqView, Me, SystemInfo, TraceResult } from "./types-app";
 import type { ParserInfo, AuditResult, BatchList, LogSource, Metrics, ProofBundle, RecentLogs, SourceCreate, ThroughputSeries, VerifyResult } from "./types";
 
 /** Errors carry the backend's message (FastAPI `detail`, string or validation list). */
@@ -31,6 +32,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = auth.get();
   const headers = { ...(init?.headers as Record<string, string> | undefined), ...(token ? { authorization: `Bearer ${token}` } : {}) };
   const res = await fetch(path, { cache: "no-store", ...init, headers });
+  if (res.status === 401 && token && typeof window !== "undefined") {
+    auth.set(""); // expired / revoked / invalid token: drop it so the session layer shows the sign-in page
+    window.dispatchEvent(new Event("logunify:unauthorized"));
+  }
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
     try {
@@ -69,4 +74,55 @@ export const api = {
       body: JSON.stringify(body),
     }),
   deleteSource: (id: string) => request<void>(`/api/v1/sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  // ---- session / system
+  me: (signal?: AbortSignal) => request<Me>("/api/v1/auth/me", { signal }),
+  system: (signal?: AbortSignal) => request<SystemInfo>("/api/v1/system", { signal }),
+
+  // ---- alerts (CERT-In workflow)
+  alerts: (status: string, signal?: AbortSignal) => request<{ items: AlertSummary[] }>(`/api/v1/alerts?status=${encodeURIComponent(status)}&limit=200`, { signal }),
+  alert: (id: string, signal?: AbortSignal) => request<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}`, { signal }),
+  alertReport: (id: string, signal?: AbortSignal) => request<CertReport>(`/api/v1/alerts/${encodeURIComponent(id)}/cert-in-report`, { signal }),
+  alertReportText: async (id: string) => {
+    const t = auth.get();
+    const r = await fetch(`/api/v1/alerts/${encodeURIComponent(id)}/cert-in-report?format=text`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!r.ok) throw new ApiError(`${r.status} ${r.statusText}`, r.status);
+    return r.text();
+  },
+  alertEvents: (id: string, signal?: AbortSignal) => request<{ items: AlertEvent[] }>(`/api/v1/alerts/${encodeURIComponent(id)}/events`, { signal }),
+  alertAck: (id: string, by: string, note: string) => post<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}/ack`, { by, note }),
+  alertDetails: (id: string, by: string, fields: Record<string, unknown>) => patch<unknown>(`/api/v1/alerts/${encodeURIComponent(id)}/details`, { by, ...fields }),
+  alertReported: (id: string, by: string, via: string, reference: string, note: string) =>
+    post<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}/report`, { by, via, reference, note }),
+  alertClose: (id: string, by: string, resolution: string, note: string) => post<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}/close`, { by, resolution, note }),
+
+  // ---- trace
+  trace: (id: string, includeRaw = false) => request<TraceResult>(`/api/v1/trace/${encodeURIComponent(id)}${includeRaw ? "?include_raw=true" : ""}`),
+
+  // ---- operations
+  dlq: (signal?: AbortSignal) => request<DlqView>("/api/v1/dlq?limit=50", { signal }),
+  dlqReplay: (limit: number) => post<{ taken: number; resubmitted: number; returned_to_dlq: number }>(`/api/v1/dlq/replay?limit=${limit}`, {}),
+
+  // ---- governance
+  auditLog: (action: string, signal?: AbortSignal) =>
+    request<{ keyed: boolean; items: AuditRow[] }>(`/api/v1/audit?limit=100${action ? `&action=${encodeURIComponent(action)}` : ""}`, { signal }),
+  auditVerify: () => post<{ valid: boolean; records: number; broken_at: number | null; reason?: string; keyed?: boolean }>("/api/v1/audit/verify", {}),
+  compliance: (signal?: AbortSignal) => request<ComplianceReport>("/api/v1/compliance/report", { signal }),
+  compliancePdf: async () => {
+    const t = auth.get();
+    const r = await fetch("/api/v1/compliance/report.pdf", { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!r.ok) throw new ApiError(`${r.status} ${r.statusText}`, r.status);
+    return r.blob();
+  },
+  revoked: (signal?: AbortSignal) => request<{ jti: string[]; subjects: Record<string, number> }>("/api/v1/auth/revoked", { signal }),
+  revokeSubject: (sub: string) => post<{ revoked: string }>("/api/v1/auth/revoke", { sub }),
+  unrevokeSubject: (sub: string) => request<void>(`/api/v1/auth/revoke/subject/${encodeURIComponent(sub)}`, { method: "DELETE" }),
 };
+
+function post<T>(path: string, body: unknown) {
+  return request<T>(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+}
+
+function patch<T>(path: string, body: unknown) {
+  return request<T>(path, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+}

@@ -57,6 +57,12 @@ def decode(token: str, secret: str, issuer: str = "", audience: str = "", leeway
     expected = hmac.new(secret.encode(), f"{parts[0]}.{parts[1]}".encode(), hashlib.sha256).digest()
     if not hmac.compare_digest(expected, _b64d(parts[2])):
         raise TokenError("bad signature")
+    check_claims(claims, issuer, audience, leeway, now)
+    return claims
+
+
+def check_claims(claims: dict, issuer: str = "", audience: str = "", leeway: int = 30, now: float | None = None) -> None:
+    """exp (mandatory), nbf, iss, aud and sub: the same rules for every signature algorithm."""
     t = time.time() if now is None else now
     exp = claims.get("exp")
     if not isinstance(exp, (int, float)) or isinstance(exp, bool):
@@ -74,4 +80,3 @@ def decode(token: str, secret: str, issuer: str = "", audience: str = "", leeway
             raise TokenError("wrong audience")
     if not isinstance(claims.get("sub"), str) or not claims["sub"]:
         raise TokenError("missing sub")
-    return claims

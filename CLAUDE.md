@@ -49,10 +49,12 @@ logunify-dashboard (Next.js) ──► SOC console over the backend API (proxied
 cd logunify-backend && python -m uvicorn app.main:app
 python -m app.parsers.cli test --strict                     # parser golden-fixture contract (CI gate)
 python scripts/bench_pipeline.py                            # one-core throughput
-python -m pytest tests -q                                   # 354 tests (+3 real-Kafka tests: -m kafka, ~2 min, needs Java + a Kafka distribution)
+python -m pytest tests -q                                   # 413 tests (+3 real-Kafka tests: -m kafka, ~2 min, needs Java + a Kafka distribution)
+python scripts/mutation_test.py --target app/privacy/pii.py --tests tests/test_pii.py --sample 40   # sampled mutation check (CI gate 80%)
+python scripts/bench_pipeline.py --min-eps 300              # throughput regression gate
 
 # dashboard (port 3000); Node is at "C:\Program Files\nodejs"
-cd logunify-dashboard && npm run dev        # npm run build · npm run typecheck
+cd logunify-dashboard && npm run dev        # npm run build · npm run typecheck · npm run e2e (Playwright + axe; build first)
 
 # flink: the Python 3.11 venv MUST be first on PATH (Flink launches workers as `python`; venv path has a space)
 cd logunify-flink && export PATH="$(cygpath "$(pwd -W)/.venv/Scripts"):$PATH"

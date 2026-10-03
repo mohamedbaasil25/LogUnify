@@ -15,7 +15,7 @@ function detail(s: LogSource): string {
   return String(s.config.ingest_path ?? "");
 }
 
-export default function SourceList({ sources, onChanged }: { sources: LogSource[] | undefined; onChanged: () => void }) {
+export default function SourceList({ sources, onChanged, canManage = true }: { sources: LogSource[] | undefined; onChanged: () => void; canManage?: boolean }) {
   const [confirm, setConfirm] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -54,13 +54,13 @@ export default function SourceList({ sources, onChanged }: { sources: LogSource[
                 <span className="text-xs uppercase text-mute">{s.format}</span>
                 <span className="tabular text-xs text-mute">{fmtNumber(s.received)} received</span>
                 <StatusPill tone={s.status === "active" ? "ok" : "warn"}>{s.status}</StatusPill>
-                {confirm === s.id ? (
+                {!canManage ? null : confirm === s.id ? (
                   <span className="flex items-center gap-1.5 text-xs">
                     <button onClick={() => remove(s.id)} className="rounded bg-crit px-2 py-1 font-medium text-bg">Delete</button>
                     <button onClick={() => setConfirm(null)} className="rounded border border-line px-2 py-1">Keep</button>
                   </span>
                 ) : (
-                  <button onClick={() => setConfirm(s.id)} className="rounded p-1.5 text-mute hover:text-crit" aria-label={`Delete source ${s.name}`}>
+                  <button onClick={() => setConfirm(s.id)} className="inline-flex h-9 w-9 items-center justify-center rounded text-mute hover:text-crit" aria-label={`Delete source ${s.name}`}>
                     <Trash2 size={15} aria-hidden />
                   </button>
                 )}

@@ -24,8 +24,14 @@ def require_key(request: Request, x_api_key: str = Header(default="")) -> None:
     key = s.alert_api_key
     if key is None:
         raise HTTPException(503, "Alert API is disabled: set LOGUNIFY_ALERT_API_KEY to enable it")
+    h = request.app.state.hardening
+    lk = ("apikey", h.client_ip(request))
+    if (left := h.keys.locked(lk)):                           # brute-force guard: locked even for the right key until it expires
+        raise HTTPException(429, "Too many failed attempts", headers={"Retry-After": str(int(left) + 1)})
     if not hmac.compare_digest(x_api_key.encode("utf-8"), key.get_secret_value().encode("utf-8")):
+        h.keys.fail(lk)
         raise HTTPException(401, "Invalid or missing X-API-Key", headers={"WWW-Authenticate": "ApiKey"})
+    h.keys.success(lk)
 
 
 def get_manager(p: Pipeline = Depends(get_pipeline)) -> AlertManager:
@@ -94,6 +100,12 @@ def _call(fn, *args, **kwargs):
         raise HTTPException(409, str(e)) from None
     except ValueError as e:
         raise HTTPException(422, str(e)) from None
+
+
+@router.get("/reference/annexure")
+def annexure():
+    """CERT-In Annexure I incident types (id -> label): the choices for the incident-type field of the report."""
+    return {"items": [{"id": k, "label": v} for k, v in cert_in.ANNEXURE_I.items()]}
 
 
 @router.get("/config")

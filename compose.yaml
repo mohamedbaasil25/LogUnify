@@ -74,12 +74,18 @@ services:
       LOGUNIFY_KAFKA_BOOTSTRAP: kafka:9092
       LOGUNIFY_MOCK_ENABLED: ${LOGUNIFY_MOCK_ENABLED:-false}
       LOGUNIFY_AUTH_MODE: ${LOGUNIFY_AUTH_MODE:-jwt}
-      LOGUNIFY_JWT_SECRET: ${LOGUNIFY_JWT_SECRET:?set LOGUNIFY_JWT_SECRET (>= 32 random bytes) in .env}
+      LOGUNIFY_JWT_SECRET: ${LOGUNIFY_JWT_SECRET:-}      # HS256 shared secret (>= 32 bytes) and/or an IdP JWKS below; one of them is required
       LOGUNIFY_AUDIT_HMAC_KEY: ${LOGUNIFY_AUDIT_HMAC_KEY:-}
       LOGUNIFY_RAW_ARCHIVE_ENABLED: ${LOGUNIFY_RAW_ARCHIVE_ENABLED:-false}
       LOGUNIFY_RAW_ARCHIVE_KEY: ${LOGUNIFY_RAW_ARCHIVE_KEY:-}
       LOGUNIFY_WORKER_ID: auto                           # a stable slot per replica (w0, w1, ...) leased from /data/.slots: survives container re-creation
       LOGUNIFY_WORKER_SLOT_DIR: /data/.slots
+      LOGUNIFY_AUTH_DB_PATH: /data/auth.db                # revocations are SHARED by all replicas (re-read every 5 s)
+      LOGUNIFY_JWT_JWKS_FILE: ${LOGUNIFY_JWT_JWKS_FILE:-}
+      LOGUNIFY_JWT_JWKS_URL: ${LOGUNIFY_JWT_JWKS_URL:-}
+      LOGUNIFY_JWT_ISSUER: ${LOGUNIFY_JWT_ISSUER:-}
+      LOGUNIFY_JWT_AUDIENCE: ${LOGUNIFY_JWT_AUDIENCE:-}
+      LOGUNIFY_JWT_ROLES_CLAIM: ${LOGUNIFY_JWT_ROLES_CLAIM:-roles}
       LOGUNIFY_STATE_DB_PATH: /data/{worker}/state.db    # {worker} -> the id above: replicas never share a SQLite file
       LOGUNIFY_ALERT_DB_PATH: /data/{worker}/alerts.db
       LOGUNIFY_AUDIT_DB_PATH: /data/{worker}/audit.db
@@ -87,6 +93,10 @@ services:
       LOGUNIFY_RAW_ARCHIVE_DIR: /data/{worker}/raw
       LOGUNIFY_PARSER_DIR: /parsers.d
       LOGUNIFY_CORS_ORIGINS: ${LOGUNIFY_CORS_ORIGINS:-}
+      LOGUNIFY_TRUSTED_PROXIES: ${LOGUNIFY_TRUSTED_PROXIES:-}      # CIDRs whose X-Forwarded-For is believed (your reverse proxy / the dashboard network)
+      LOGUNIFY_RATE_LIMIT_PER_MIN: ${LOGUNIFY_RATE_LIMIT_PER_MIN:-0}
+      LOGUNIFY_DOCS_ENABLED: ${LOGUNIFY_DOCS_ENABLED:-false}
+      LOGUNIFY_HSTS_ENABLED: ${LOGUNIFY_HSTS_ENABLED:-false}
     volumes:
       - backend-data:/data
       - ./parsers.d:/parsers.d:ro                         # drop declarative parsers here (see app/parsers/sdk.py)
