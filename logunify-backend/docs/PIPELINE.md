@@ -35,6 +35,20 @@ Limits: the archive queue is bounded (overflow is counted in `dropped`, not bloc
 ## 3. Parsers: onboarding a source without touching the pipeline (`app/parsers/sdk.py`)
 1. **Declarative YAML** in `LOGUNIFY_PARSER_DIR`: regex with named groups (`kind: regex`) or JSON paths (`kind: json`), field mapping with types/transforms/drop rules, conditional rules,
    timestamp format, sniff rule. Shipped examples: `app/parsers/builtin/{nginx_access,iptables_log,aws_cloudtrail}.yaml`.
+
+### Product parser library (declarative, each with golden fixtures in `parser_fixtures/`)
+| parser | input it expects | notes |
+|---|---|---|
+| `windows_security` | JSON per event, NXLog `to_json()` names (`EventID`, `Channel`, `Hostname`/`Computer`, `TargetUserName`, `IpAddress`); not Winlogbeat's `winlog.*`. See `WINDOWS_SECURITY.md` | maps 4624/4625/4634/4647/4648, 4740, 4720/4726, 4728/4732/4756, 4672, 4688, 4697/7045, 1102 |
+| `linux_auditd` | `type=X msg=audit(epoch:serial): ...`, raw or behind a syslog/audispd header | outcome from `res=`; category by record type |
+| `okta_system_log` | one System Log event per line | outcome from `outcome.result`; category by `eventType` prefix |
+| `azure_ad_signin` | Entra ID sign-in record (diagnostic settings / Event Hub) | outcome from `status.errorCode` |
+| `fortinet_fortigate` | FortiGate key=value (traffic, utm, event) | keys picked in any order; timestamp is device-local |
+| `palo_alto_traffic` | PAN-OS TRAFFIC CSV, **default column order only** | custom log formats need their own parser |
+`aws_cloudtrail` already existed. **Verification status:** these were written from the vendors' documented formats and tested on hand-made
+samples, NOT on real exports from your devices. Before relying on one, run `python -m app.parsers.cli try <name> "<your line>"` on real
+logs and add them as fixtures; unmatched lines are dead-lettered, not lost. Not covered yet: PAN-OS THREAT/SYSTEM logs, Windows XML/EVTX
+(convert to JSON at the shipper), CloudTrail `Records[]` wrappers (unwrap first).
 2. **Python plugin** (`*.py` with `PARSERS = [...]`) or 3. **entry point** in group `logunify.parsers`.
 Detection: every parser `sniff()`s, the most confident wins (ties: priority, then registration order); a source/ingest `format` selects a parser by name. A broken parser file is skipped
 and reported in `GET /api/v1/parsers` (`errors`), never fatal. Regexes are linted for catastrophic backtracking and run on the first 8 KB only. **Parser files are code-equivalent:**

@@ -1,0 +1,1 @@
+{"uuid":"aa5c1f8e-0a4b-11ef-9c3a-0242ac120003","published":"2026-10-01T08:35:00.000Z","eventType":"user.mfa.factor.deactivate","displayMessage":"Reset factor for user","severity":"INFO","actor":{"id":"00uadmin","alternateId":"admin@example.com","displayName":"Admin"},"client":{"ipAddress":"198.51.100.23"},"outcome":{"result":"SUCCESS"}}

@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import logging
 import time
 from collections import deque
@@ -42,6 +43,8 @@ class Pipeline:
                                settings.pii_hash_key.get_secret_value() if settings.pii_hash_key else None
                                ) if settings.pii_enabled else None
         self.recent: deque[dict] = deque(maxlen=settings.recent_buffer)
+        self.recent_total = 0                                   # events ever appended to `recent` (monotonic: the state store saves only the new ones)
+        self.recent_lock = threading.Lock()                     # append + counter move together; the state store snapshots under the same lock
         self.anomalies: deque[dict] = deque(maxlen=200)
         self.intel = LogIntelligence(settings.anomaly_threshold, settings.ml_warmup,
                                      settings.ml_refit_every, settings.ml_window) if settings.intel_enabled else None
@@ -228,7 +231,9 @@ class Pipeline:
         n = self._n
         m.record_processed(parsed.format, len(it.raw),
                            self._compressor.size(doc) if n <= 64 else (self._compressor.size(doc) * 8 if n % 8 == 0 else 0))
-        self.recent.append(doc)
+        with self.recent_lock:
+            self.recent.append(doc)
+            self.recent_total += 1
         self.stream.publish(doc)
         if self.archive:
             self._archive(it, doc)

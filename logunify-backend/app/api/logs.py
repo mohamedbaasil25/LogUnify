@@ -27,7 +27,7 @@ def _known_format(p: Pipeline, fmt: str | None) -> None:
 async def ingest(req: IngestRequest, request: Request, p: Pipeline = Depends(get_pipeline)):
     """Publish raw logs to the ingestion topic; parsing happens asynchronously in the pipeline."""
     _known_format(p, req.format)
-    peer = request.client.host if request.client else None
+    peer = request.app.state.hardening.client_ip(request)
     accepted = await p.submit_many([line.encode() for line in req.logs], req.format, transport="http", peer=peer)
     return {"submitted": len(req.logs), "accepted": accepted, "rejected": len(req.logs) - accepted}
 
@@ -36,6 +36,10 @@ async def ingest(req: IngestRequest, request: Request, p: Pipeline = Depends(get
 def parse_preview(req: ParseRequest, p: Pipeline = Depends(get_pipeline)):
     """Dry-run: parse one log into ECS synchronously. Counts toward metrics like any other log."""
     _known_format(p, req.format)
+    if len(req.log.encode()) > p.settings.max_raw_bytes:
+        p.metrics.record_received(len(req.log.encode()))
+        p.metrics.record_dropped("oversize")
+        raise HTTPException(413, f"log larger than {p.settings.max_raw_bytes} bytes")
     p.metrics.record_received(len(req.log.encode()))
     doc = p.process(req.log.encode(), req.format)
     return {"ok": doc is not None, "ecs": doc}

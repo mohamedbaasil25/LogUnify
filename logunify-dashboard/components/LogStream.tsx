@@ -100,15 +100,16 @@ export default function LogStream() {
 
       <div className="max-h-[560px] overflow-auto">
         <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+          <caption className="sr-only">Most recent normalized log events, newest first. Expand a row for details.</caption>
           <thead className="sticky top-0 z-10 bg-panel2 text-xs uppercase tracking-wider text-mute">
             <tr>
-              <th className="w-8 px-2 py-2" aria-label="Expand" />
-              <th className="px-3 py-2 font-medium">Timestamp</th>
-              <th className="px-3 py-2 font-medium">Source IP</th>
-              <th className="px-3 py-2 font-medium">Log source</th>
-              <th className="px-3 py-2 font-medium">Event action</th>
-              <th className="px-3 py-2 font-medium">Severity</th>
-              <th className="px-3 py-2 font-medium">ATT&amp;CK / TI</th>
+              <th scope="col" className="w-8 px-2 py-2" aria-label="Expand" />
+              <th scope="col" className="px-3 py-2 font-medium">Timestamp</th>
+              <th scope="col" className="px-3 py-2 font-medium">Source IP</th>
+              <th scope="col" className="px-3 py-2 font-medium">Log source</th>
+              <th scope="col" className="px-3 py-2 font-medium">Event action</th>
+              <th scope="col" className="px-3 py-2 font-medium">Severity</th>
+              <th scope="col" className="px-3 py-2 font-medium">ATT&amp;CK / TI</th>
             </tr>
           </thead>
           <tbody>
@@ -124,7 +125,7 @@ export default function LogStream() {
                         onClick={() => setOpen(expanded ? null : key)}
                         aria-expanded={expanded}
                         aria-label={expanded ? "Collapse event details" : "Expand event details"}
-                        className="rounded p-1 text-mute hover:text-fg"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded text-mute hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                       >
                         <ChevronRight size={14} className={expanded ? "rotate-90" : ""} aria-hidden />
                       </button>

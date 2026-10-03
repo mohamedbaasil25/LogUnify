@@ -1,0 +1,1 @@
+{"EventTime":"2026-10-01 09:15:42","Hostname":"dc01","Computer":"DC01.corp.example.com","Channel":"Security","EventID":4625,"SourceName":"Microsoft-Windows-Security-Auditing","TargetUserName":"administrator","TargetDomainName":"CORP","LogonType":3,"IpAddress":"203.0.113.50","IpPort":"51422","WorkstationName":"KALI","Status":"0xc000006d","Message":"An account failed to log on."}

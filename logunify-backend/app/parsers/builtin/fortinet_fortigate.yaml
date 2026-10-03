@@ -1,0 +1,48 @@
+# Fortinet FortiGate key=value log (syslog format default), with or without a syslog <PRI> header.
+# Lookahead groups pick keys in any order, so a firmware that adds or reorders keys keeps parsing.
+name: fortinet_fortigate
+version: "1.0.0"
+kind: regex
+description: Fortinet FortiGate traffic / utm / event logs (key=value)
+priority: 18
+sniff:
+  regex: 'devname="?[^ "]+"? .*logid="?\d{10}"?|logid="?\d{10}"? .*devname='
+  confidence: 0.97
+match:
+  regex: '^(?:<\d{1,3}>)?(?=.*?\bdate=(?P<dt>\d{4}-\d\d-\d\d time=\d\d:\d\d:\d\d))(?=.*?\bdevname="?(?P<dev>[^ "]+))(?=.*?\blogid="?(?P<logid>\d+))(?=.*?\btype="?(?P<type>[a-z]+))(?:(?=.*?\bsubtype="?(?P<subtype>[a-z0-9-]+)))?(?:(?=.*?\bsrcip=(?P<srcip>[0-9a-fA-F:.]+)))?(?:(?=.*?\bdstip=(?P<dstip>[0-9a-fA-F:.]+)))?(?:(?=.*?\bsrcport=(?P<sport>\d+)))?(?:(?=.*?\bdstport=(?P<dport>\d+)))?(?:(?=.*?\bproto=(?P<proto>\d+)))?(?:(?=.*?\baction="?(?P<action>[A-Za-z_-]+)))?(?:(?=.*?\bpolicyid=(?P<policy>\d+)))?(?:(?=.*?\bsrcintf="?(?P<srcintf>[^ "]+)))?(?:(?=.*?\bdstintf="?(?P<dstintf>[^ "]+)))?(?:(?=.*?\bapp="(?P<app>[^"]*)))?(?:(?=.*?\bmsg="(?P<msg>[^"]*)))?(?:(?=.*?\buser="(?P<user>[^"]*)))?.*$'
+timestamp:
+  field: dt
+  format: "%Y-%m-%d time=%H:%M:%S"      # date= and time= are adjacent keys; device-local time (set the source timezone)
+message: "{type}/{subtype} {action} {srcip} -> {dstip}"
+fields:
+  observer.name:                     {from: dev}
+  observer.type:                     {value: firewall}
+  observer.vendor:                   {value: Fortinet}
+  event.code:                        {from: logid}
+  event.action:                      {from: action, transform: lower}
+  source.ip:                         {from: srcip, type: ip}
+  destination.ip:                    {from: dstip, type: ip}
+  source.port:                       {from: sport, type: int}
+  destination.port:                  {from: dport, type: int}
+  network.iana_number:               {from: proto}
+  network.application:               {from: app, drop_if: [""]}
+  observer.ingress.interface.name:   {from: srcintf}
+  observer.egress.interface.name:    {from: dstintf}
+  rule.id:                           {from: policy}
+  user.name:                         {from: user, drop_if: ["", "N/A"]}
+  labels.fortigate_type:             {from: type}
+  labels.fortigate_subtype:          {from: subtype}
+rules:
+  - when: {field: action, regex: '(?i)^(?:deny|drop|block|blocked|dropped|reject|timeout|ip-conn)'}
+    set: {event.outcome: failure, event.type: [connection, denied]}
+  - when: {field: action, regex: '(?i)^(?:accept|allow|close|start|pass|passthrough)'}
+    set: {event.outcome: success, event.type: [connection, allowed]}
+  - when: {field: type, equals: utm}
+    set: {event.category: [intrusion_detection, network]}
+  - when: {field: type, equals: event}
+    set: {event.category: [configuration]}
+static:
+  event.kind: event
+  event.category: [network]
+  event.type: [connection]
+  event.module: fortinet

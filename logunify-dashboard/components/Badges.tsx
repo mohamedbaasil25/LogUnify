@@ -17,7 +17,7 @@ export function SeverityBadge({ level, score }: { level: Severity; score: number
       title={score === null ? "Model still warming up: no anomaly score yet" : `Anomaly score ${score.toFixed(2)}`}
     >
       <span className="capitalize">{level}</span>
-      {score !== null && <span className="tabular font-mono opacity-80">{score.toFixed(2)}</span>}
+      {score !== null && <span className="tabular font-mono">{score.toFixed(2)}</span>}
     </span>
   );
 }

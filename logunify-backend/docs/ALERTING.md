@@ -188,3 +188,62 @@ The live run also exposed two bugs that unit tests had not (a lone external addr
 - `alerts.db` is never purged (alert records and their audit trail are compliance evidence: apply your own retention policy, and set an **absolute** `LOGUNIFY_ALERT_DB_PATH` on a backed-up volume; the default is relative to the working directory). The hourly notification cap limits messages, not stored alerts.
 - The alert API uses one shared key; the rest of the LogUnify API remains unauthenticated (unchanged). Put it behind your gateway/SSO for production.
 - CERT-In FAQ Q35 says logs may be stored outside India if they can be produced to CERT-In reasonably quickly, while Directions para (iv) says "within the Indian jurisdiction"; confirm your position with counsel.
+
+
+## Analyst workflow: ownership, case notes, notifications, search
+
+**Assignment** (`POST /api/v1/alerts/{id}/assign`, body `{by, to, note}`; `to: null` clears it). The owner is free text: a username, or an email
+address. Assigning never changes the status or the CERT-In clock; it is an `assigned` / `unassigned` event in the audit trail. The configured
+channels (webhook, Slack, Teams, email) receive an `incident.assigned` message with the technique, host, score and the time left on the clock; if the
+assignee is an email address the email channel also mails that person. The notice is best effort and recorded as `assignment_notified`; a failed
+notice never blocks the assignment. Filter with `GET /api/v1/alerts?assignee=<name>|unassigned` (the dashboard's Mine / Unassigned buttons).
+
+**Case notes** (`POST` / `GET /api/v1/alerts/{id}/notes`, body `{by, text}`, 1-4000 chars). Notes are rows in the append-only event table, so they
+cannot be edited or deleted (the database refuses it) and they are allowed after the alert is closed (post-incident review). Mind what you write: a note is
+compliance evidence and is not PII-redacted.
+
+**Identity.** `by` is recorded as sent, like the other workflow calls. The dashboard sends the authenticated subject; a direct API caller can type
+any name. With `LOGUNIFY_AUTH_MODE=jwt` the call is audited under the token's real subject, so the two can be compared in the audit log.
+
+**Notifications.** Channels: signed webhook, SMTP email, **Slack** (`LOGUNIFY_ALERT_SLACK_WEBHOOK_URL`) and **Microsoft Teams**
+(`LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL`). Chat URLs are secrets (`SecretStr`), https only, and only `scheme://host` is ever logged. They get every message the
+other channels get (detected, reminders, overdue, storm, test) through the same retry / rate-limit path. Check delivery with `POST /api/v1/alerts/test`.
+*Verification status:* Slack and Teams are tested against mock HTTP transports only, never a live workspace. The Teams payload is an Adaptive Card in a
+`message` envelope (the Workflows webhook shape); legacy Office 365 connector URLs expect a different format.
+
+**Search** (`GET /api/v1/logs/search?q=&from=&to=&format=&min_score=&limit=&offset=`, analyst). Query: words match the message, `field:value` is exact
+(`*` wildcard), a leading `-` excludes, terms are AND-ed; `from`/`to` take ISO-8601 or `-15m`, `-6h`, `-7d`. **It searches only the events this instance
+still holds** (`LOGUNIFY_RECENT_BUFFER`, default 1,000, restored after a restart), not history; every response carries a `coverage` block with the window
+actually searched, and the UI repeats it. For real history use your SIEM (Elasticsearch / Splunk / Wazuh). Raise the buffer for longer windows (memory grows linearly).
+
+**Saved searches** (`/api/v1/searches`, analyst): `logs` searches (the query above) and `alerts` searches (`status`, `assignee`, where `me` means the
+caller). Private by default, or shared with all analysts; only the owner (or an admin) changes a shared one; a private search of someone else is a 404.
+Relative ranges are evaluated when the search runs. They live in the alert database (per replica, like the alerts), so they need alerting enabled.
+
+
+## Calibration (dashboard `/calibration`, `GET /api/v1/alerts-calibration`)
+
+Two kinds of evidence, deliberately kept apart:
+
+* **Replay** re-runs the production rules (`AlertRules`) and the production grouping (technique family + asset, one alert per 30-minute quiet period)
+  over the events this instance still holds (`LOGUNIFY_RECENT_BUFFER`; raise it, e.g. 50,000, to replay days instead of minutes; memory grows
+  linearly). It shows the score histogram, a **funnel** (events > model warmed up > score above threshold > carries a technique > chosen by a rule >
+  critical technique > not suppressed: the step where the count collapses is what to fix), a **sweep** of alerts per threshold with projected alerts/day,
+  and a **preview** of the exact alerts a candidate threshold / critical set would have raised (try `threshold=` and `critical=`; scope it to one parser with
+  `format=` and a window with `from=-24h`). A replay cannot tell false positives from real ones.
+* **Feedback** is what analysts decided: closed alerts by resolution, false-positive rate per technique and per asset, the CERT-In on-time rate, overdue count,
+  alerts per day. It only exists for alerts that fired at the thresholds in force at the time, and small counts are flagged as unreliable.
+
+Every replay carries a **confidence** rating (`low` under 24 h or 1,000 events, `high` from 72 h and 5,000 events). The recommendation is the *lowest* threshold whose
+projected volume fits `capacity_per_day`; with a short window it refuses to project. It is advice: **the threshold and the critical set are never changed from
+the UI**, they stay `LOGUNIFY_ALERT_*` configuration changed deliberately and restarted. Techniques are only tagged above `LOGUNIFY_ANOMALY_THRESHOLD`
+(0.7), so a threshold below that behaves like 0.7.
+
+**Suppression rules** are the only runtime tuning: technique (or `*`) + asset pattern (`backup-*`, `10.2.0.*`), a reason of 10+ characters, an expiry of at most 90 days, **admin only**.
+The asset pattern must name something (no blanket rules; to stop a technique everywhere, remove it from the critical set in configuration). A suppressed event is still
+parsed, scored, stored and traceable; only the *alert* is skipped, and every hit is counted. Rules are never edited or deleted, only revoked, and they are persisted with the
+alerts, so they survive a restart. Hit counters are in memory and reset on restart. **A suppressed incident starts no CERT-In clock**: suppress only after a person confirmed the cause
+(the "Noisiest assets" table marks candidates: 3+ false positives and never a real incident).
+
+Suggested loop for a new source: send its logs for a few days (raise the buffer) > open Calibration scoped to that parser > read the funnel > preview candidates and review the
+sample rows > close real alerts with honest resolutions for a week or two > re-read feedback > change `LOGUNIFY_ALERT_*` or add reviewed suppressions.

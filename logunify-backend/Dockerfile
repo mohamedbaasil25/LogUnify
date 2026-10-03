@@ -16,7 +16,7 @@ COPY --from=build /opt/venv /opt/venv
 # FORWARDER_ROOT: retention policy files, mounted read-only by compose (used by the compliance retention proof)
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 LOGUNIFY_AUTH_MODE=jwt \
-    LOGUNIFY_ALERT_DB_PATH=/data/alerts.db LOGUNIFY_AUDIT_DB_PATH=/data/audit.db LOGUNIFY_STATE_DB_PATH=/data/state.db \
+    LOGUNIFY_AUTH_DB_PATH=/data/auth.db LOGUNIFY_ALERT_DB_PATH=/data/alerts.db LOGUNIFY_AUDIT_DB_PATH=/data/audit.db LOGUNIFY_STATE_DB_PATH=/data/state.db \
     LOGUNIFY_DLQ_PATH=/data/dlq.jsonl LOGUNIFY_RAW_ARCHIVE_DIR=/data/raw LOGUNIFY_COMPLIANCE_REPORT_DIR=/data/compliance \
     LOGUNIFY_ES_FORWARD_DLQ_PATH=/data/es-dlq.jsonl LOGUNIFY_FORWARDER_ROOT=/opt/forwarder
 WORKDIR /app
