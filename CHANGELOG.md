@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- **State:** optional PostgreSQL backend (`LOGUNIFY_STATE_DATABASE_URL`, schema per replica, advisory-lock ownership, reconnect); SQLite default unchanged (schema v2, v1 files upgrade in place).
+- **Models survive restarts:** Drain3 templates and the Isolation Forest training window are persisted, HMAC-signed and verified before loading.
+- **Redis:** `LOGUNIFY_REDIS_URL` shares the request-rate limit across replicas (fails open to per-replica).
+- CI runs the backend suite against real PostgreSQL 16 and Redis 7 service containers.
+
 ## 1.0.0
 First release candidate.
 

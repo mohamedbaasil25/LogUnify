@@ -51,6 +51,8 @@ def create_app(settings: Settings = default_settings) -> FastAPI:
         await app.state.listeners.stop_all()
         await pipeline.stop()
         await st.close()                                           # final flush, after the last log was processed
+        if hasattr(hardening.rate, "close"):
+            await hardening.rate.close()
 
     app = FastAPI(title="LogUnify", version=settings.version,
                   description="Universal log pre-processing: Syslog/JSON/CEF -> ECS", lifespan=lifespan,
@@ -77,8 +79,14 @@ def create_app(settings: Settings = default_settings) -> FastAPI:
     app.state.sources = SourceRegistry()
     app.state.pipeline = Pipeline(make_bus(settings), app.state.metrics, settings)
     p_ = app.state.pipeline
-    app.state.state = StateStore(settings.state_db_path, settings.state_flush_interval_s, settings.state_persist_logs).attach(
-        sources=app.state.sources, ti=p_.ti, batcher=p_.batcher, ledger=p_.ledger, recent=p_.recent, anomalies=p_.anomalies)
+    app.state.state = StateStore(
+        settings.state_db_path, settings.state_flush_interval_s, settings.state_persist_logs,
+        database_url=settings.state_database_url.get_secret_value() if settings.state_database_url else "",
+        worker_id=settings.worker_id, persist_models=settings.state_persist_models, model_interval_s=settings.state_model_interval_s,
+        hmac_key=((settings.state_hmac_key or settings.audit_hmac_key).get_secret_value().encode()
+                  if (settings.state_hmac_key or settings.audit_hmac_key) else None),
+    ).attach(sources=app.state.sources, ti=p_.ti, batcher=p_.batcher, ledger=p_.ledger, recent=p_.recent, anomalies=p_.anomalies,
+             intel=p_.intel)
     app.state.listeners = ListenerManager(app.state.pipeline, settings)
     for r in (health.router, metrics.router, logs.router, intel.router, integrity.router, sources.router, threatintel.router,
               alerts.router, audit_api.router, compliance_api.router, state_api.router, forwarding_api.router, dlq_api.router,

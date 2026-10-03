@@ -12,6 +12,9 @@ Set them as real environment variables (systemd `EnvironmentFile`, Docker/Kubern
 |---|---|---|
 | `LOGUNIFY_JWT_SECRET` | signs/verifies bearer tokens when `LOGUNIFY_AUTH_MODE=jwt` (>= 32 bytes) | `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `LOGUNIFY_AUDIT_HMAC_KEY` | keys the audit-log hash chain | same |
+| `LOGUNIFY_STATE_DATABASE_URL` | PostgreSQL DSN for durable state (contains the DB password; only `user@host/db#schema` is ever shown by `/api/v1/state`) | your DBA / secret manager; use `sslmode=verify-full` |
+| `LOGUNIFY_STATE_HMAC_KEY` | authenticates saved Drain3 / Isolation Forest blobs before they are loaded (falls back to `AUDIT_HMAC_KEY`; without either, models are not persisted) | same as above |
+| `LOGUNIFY_REDIS_URL` | Redis for the cross-replica request-rate limit (`redis://:password@host:6379/0`) | your platform |
 | `LOGUNIFY_ALERT_API_KEY` | legacy `X-API-Key` for `/api/v1/alerts*` | same |
 | `LOGUNIFY_ALERT_WEBHOOK_SECRET` | HMAC-signs alert webhooks | same |
 | `LOGUNIFY_ALERT_SMTP_PASSWORD` | SMTP login | from your mail provider |

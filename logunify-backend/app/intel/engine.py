@@ -31,6 +31,23 @@ class LogIntelligence:
         self.scorer = AnomalyScorer(warmup=warmup, refit_every=refit_every, window=window)
         self.anomalies = 0
 
+    def export_state(self) -> dict[str, str]:
+        """Learned state as text blobs: Drain3 templates (snapshot) and the Isolation Forest training window (JSON)."""
+        import json
+        return {"drain3": self.miner.export_state().decode("ascii"),
+                "iforest_window": json.dumps(self.scorer.export_window(), separators=(",", ":"))}
+
+    def import_state(self, blobs: dict[str, str]) -> dict:
+        """Restore what `export_state` saved. The caller MUST have authenticated the blobs (Drain3's format is jsonpickle)."""
+        import json
+        out = {}
+        if "drain3" in blobs:
+            out["templates"] = self.miner.import_state(blobs["drain3"].encode("ascii"))
+        if "iforest_window" in blobs:
+            out["iforest_samples"] = len(rows := json.loads(blobs["iforest_window"]))
+            out["model_ready"] = self.scorer.import_window(rows)
+        return out
+
     def analyze(self, parsed: ParsedLog) -> Analysis:
         """Enrich `parsed.fields` in place (setdefault only) and return the analysis."""
         return self.analyze_many([parsed])[0]

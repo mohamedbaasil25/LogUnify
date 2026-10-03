@@ -71,10 +71,10 @@ python retention/capacity.py --eps 500
 
 1. **Calibrate the alert threshold**: at 0.9 nothing fires (0 alerts / 58k logs; 0.80 → 6). Use `alert_threshold_survey.py` on real traffic.
 2. **Real IdP**: RBAC + audit exist (HS256 JWT, `LOGUNIFY_AUTH_MODE=jwt`; default `off` = open). Still to do: RS256/JWKS (Keycloak/Entra), mTLS, run the live ILM check against a real cluster.
-3. **Remaining deployment work:** build/run the Flink + Vector images, Helm chart, one shared state store for multi-worker. Flink output (`logunify.siem`) has no consumer yet.
+3. **Remaining deployment work:** build/run the Flink + Vector images, Helm chart. Done: PostgreSQL state backend (schema per replica), signed Drain3/IF persistence, Redis-shared rate limit. Still open: logically shared sources/batches across replicas, Postgres for alerts/audit/revocations, Redis for the lockout limiter. Flink output (`logunify.siem`) has no consumer yet.
 3b. **Replace placeholders**: MaxMind GeoIP, live MISP, real Hyperledger Fabric gateway (`submit_anchor`/`get_anchor`), validated ATT&CK analytics.
 4. **Validate lifecycle policies on real clusters** (ES ILM, Splunk indexes.conf, Wazuh rules via `wazuh-logtest`, ISM); size with `capacity.py`.
-5. **Persistence**: sources, IOC feeds, batches, anchors, recent logs now persist (`state/`, aiosqlite, `docs/STATE.md`). Still in memory: Drain3 templates, Isolation Forest, TI hit history, metrics. Single-process only.
+5. **Persistence**: sources, IOC feeds, batches, anchors, recent logs now persist (`state/`, aiosqlite, `docs/STATE.md`). Models (Drain3 templates, IF window) persist when an HMAC key is set. Still in memory: TI hit history, metrics. One writer per file/schema.
 6. **API-pull listeners** (stored as config only). Syslog UDP/TCP listeners exist (`listeners/`, no TLS/RFC 5425); HTTP push works.
 7. Dashboard: push (SSE/WebSocket) instead of 2 s polling; alerts view.
 

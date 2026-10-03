@@ -113,6 +113,11 @@ class Settings(BaseSettings):
     state_enabled: bool = True
     state_db_path: str = "data/state.db"
     state_flush_interval_s: float = 5.0            # a crash loses at most this much
+    state_database_url: SecretStr | None = None   # postgresql://user:pass@host/db : shared server, one schema per replica; unset = SQLite file
+    state_persist_models: bool = True              # Drain3 templates + Isolation Forest training window (needs an HMAC key, below)
+    state_model_interval_s: float = 60.0           # at most one model snapshot per interval (it runs on the event loop)
+    state_hmac_key: SecretStr | None = None        # authenticates saved model blobs before they are loaded; falls back to AUDIT_HMAC_KEY
+    redis_url: SecretStr | None = None             # redis://host:6379/0 : request rate limit shared by all replicas (fails open to local)
     state_persist_logs: bool = True                # recent logs + anomalies (PII-redacted) also saved; false = only the rest
 
     # ---- syslog listeners (app/listeners): unset port = off. 514 needs elevated rights on Linux; there is no TLS ----------

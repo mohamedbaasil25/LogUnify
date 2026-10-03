@@ -1,6 +1,7 @@
 """Perimeter hardening: client identity, brute-force lockout, request-rate limiting, body-size cap, security headers.
 
-All state is in memory and per process (a limiter in front of N replicas counts per replica); it is a speed bump for
+State is in memory and per process (a limiter in front of N replicas counts per replica) unless LOGUNIFY_REDIS_URL is set, which
+makes the request-rate limit shared by all replicas (the failure/lockout limiter stays per process); it is a speed bump for
 guessing and floods, not a WAF. Put a real reverse proxy / WAF in front for internet exposure.
 
 * client_ip(): the TCP peer, or, when the peer is a TRUSTED PROXY (LOGUNIFY_TRUSTED_PROXIES), the right-most X-Forwarded-For
@@ -14,6 +15,7 @@ guessing and floods, not a WAF. Put a real reverse proxy / WAF in front for inte
 """
 import ipaddress
 import json
+import logging
 import threading
 import time
 from collections import OrderedDict, deque
@@ -32,7 +34,10 @@ class Hardening:
     def __init__(self, settings):
         self.trusted = _nets(settings.trusted_proxies)
         self.keys = FailureLimiter(settings.auth_fail_max, settings.auth_fail_window_s, settings.auth_lock_s)
-        self.rate = RequestRateLimiter(settings.rate_limit_per_min) if settings.rate_limit_per_min > 0 else None
+        self.rate = None
+        if settings.rate_limit_per_min > 0:
+            url = settings.redis_url.get_secret_value() if getattr(settings, "redis_url", None) else ""
+            self.rate = SharedRateLimiter(settings.rate_limit_per_min, url) if url else RequestRateLimiter(settings.rate_limit_per_min)
 
     def _trusted(self, ip: str) -> bool:
         try:
@@ -109,6 +114,41 @@ class RequestRateLimiter:
             return e[1] <= self.limit, max(1, int(60 - (now - e[0])))
 
 
+class SharedRateLimiter(RequestRateLimiter):
+    """Fixed-window requests/minute counted in Redis, so N replicas enforce ONE limit. Redis being slow or down must never take the
+    API with it: after a 250 ms timeout or any error the request is counted by the local limiter instead (fail open to per-replica)."""
+
+    def __init__(self, per_minute: int, url: str, timeout_s: float = 0.25):
+        super().__init__(per_minute)
+        import redis.asyncio as aioredis
+        self._r = aioredis.from_url(url, socket_timeout=timeout_s, socket_connect_timeout=timeout_s, decode_responses=True)
+        self.timeout = timeout_s
+        self.errors, self.last_error, self._warned = 0, None, 0.0
+
+    async def allow_async(self, client: str) -> tuple[bool, int]:
+        import asyncio
+        now = time.time()
+        window = int(now // 60)
+        key = f"logunify:rl:{window}:{client}"
+        try:
+            async with asyncio.timeout(self.timeout * 2):
+                pipe = self._r.pipeline(transaction=True)
+                pipe.incr(key)
+                pipe.expire(key, 120)
+                count = (await pipe.execute())[0]
+            return count <= self.limit, max(1, int(60 - (now % 60)))
+        except Exception as e:
+            self.errors += 1
+            self.last_error = f"{type(e).__name__}"
+            if time.monotonic() - self._warned > 60:
+                self._warned = time.monotonic()
+                logging.getLogger("logunify.security").warning("shared rate limiter unavailable (%s); counting per replica", e)
+            return self.allow(client)
+
+    async def close(self) -> None:
+        await self._r.aclose()
+
+
 # ------------------------------------------------------------------------------------------------ ASGI middleware
 async def _json(send, status: int, body: dict, extra: list | None = None) -> None:
     data = json.dumps(body).encode()
@@ -168,7 +208,8 @@ class RateLimitMiddleware:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and self.h.rate is not None and not scope["path"].startswith(self._SKIP):
-            ok, retry = self.h.rate.allow(self.h.client_ip(scope))
+            client = self.h.client_ip(scope)
+            ok, retry = (await self.h.rate.allow_async(client)) if hasattr(self.h.rate, "allow_async") else self.h.rate.allow(client)
             if not ok:
                 return await _json(send, 429, {"detail": "rate limit exceeded"}, [(b"retry-after", str(retry).encode())])
         await self.app(scope, receive, send)
