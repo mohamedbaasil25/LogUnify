@@ -7,12 +7,12 @@ Start with ONE host (the elevated / admin host you care about), not a domain con
 restore) was run end to end here with *synthetic* events (`scripts/send_windows_samples.py`). The Windows side (audit policy, NXLog) is written
 from the vendors' documentation and **has not been run against a real Windows host or NXLog**. Check one real event against the parser first (step 5).
 
-## 0. Go-live order (the deployment pack: `deploy/windows-security/`)
+## 0. Go-live order (the deployment pack: `deploy/windows-security/`; filled in for `WinServer-01` with TLS in `WINSERVER-01.md`)
 
 | # | Where | Do | File |
 |---|---|---|---|
 | 1 | LogUnify host | set the environment (buffer, message size, HMAC key, listener address, alert channel) | `env.example`, `deploy/compose.windows-security.yaml` |
-| 2 | LogUnify host | TLS terminator with **mutual TLS** in front of the listener (it has no TLS / auth of its own), then keep the listener on loopback | `stunnel-logunify.conf.example` |
+| 2 | LogUnify host | certificates (`make-certs.sh`), then a TLS terminator with **mutual TLS** in front of the listener (it has no TLS / auth of its own); the listener stays on loopback | `make-certs.sh`, `stunnel-logunify.conf.example` |
 | 3 | LogUnify (admin API) | create the source: TCP, port 5514, `format: windows_security`, the host's IANA `timezone` | step 4 below |
 | 4 | Windows host (elevated) | dry-run, read, then apply the audit settings | `Set-LogUnifyAuditPolicy.ps1` (`-Apply`) |
 | 5 | Windows host (elevated) | dry-run, read, then install the NXLog configuration (backs up the old one, validates with `nxlog.exe -v`, restarts the service) | `Install-LogUnifyForwarder.ps1 -LogUnifyHost ... -Port 6514 -Tls ... -Apply` |

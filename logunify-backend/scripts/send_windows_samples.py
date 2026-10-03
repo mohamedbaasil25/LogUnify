@@ -62,12 +62,22 @@ def main() -> int:
     ap.add_argument("--rare", type=float, default=0.002, help="share of rare critical events")
     ap.add_argument("--utc-offset", type=float, default=5.5, help="hours: NXLog writes EventTime in the host's LOCAL time (default IST)")
     ap.add_argument("--realtime", action="store_true", help="stamp each event with the current time (default: spread over the last COUNT seconds, a backlog)")
+    ap.add_argument("--tls-ca", help="CA file: connect with TLS and verify the server against it (server name = --host, so use the name in the certificate)")
+    ap.add_argument("--tls-cert", help="client certificate (mutual TLS)")
+    ap.add_argument("--tls-key", help="client private key")
     ap.add_argument("--seed", type=int, default=7)
     a = ap.parse_args()
     rng, local_tz = random.Random(a.seed), timezone(timedelta(hours=a.utc_offset))
     t0 = datetime.now(timezone.utc) - timedelta(seconds=a.count)
     sent, start = 0, time.perf_counter()
-    with socket.create_connection((a.host, a.port), timeout=10) as s:
+    raw = socket.create_connection((a.host, a.port), timeout=10)
+    if a.tls_ca:
+        import ssl
+        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=a.tls_ca)
+        if a.tls_cert:
+            ctx.load_cert_chain(a.tls_cert, a.tls_key)
+        raw = ctx.wrap_socket(raw, server_hostname=a.host)                  # verifies the chain AND that the certificate matches --host
+    with raw as s:
         batch = []
         for i in range(a.count):
             ev = event(rng, datetime.now(timezone.utc) if a.realtime else t0 + timedelta(seconds=i), rng.random() < a.rare, local_tz)

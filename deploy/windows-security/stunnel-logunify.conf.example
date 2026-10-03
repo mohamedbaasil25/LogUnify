@@ -1,16 +1,18 @@
-; TLS terminator in front of the LogUnify TCP listener (which has no TLS and no authentication). Mutual TLS = only hosts holding a certificate
-; from YOUR CA can send. Runs on the LogUnify host; LogUnify's listener stays on loopback (LOGUNIFY_WINDOWS_LISTEN=127.0.0.1).
-; Not run by the author against a live stunnel / NXLog: treat as a starting point.
-foreground = no
-setuid = stunnel4
-setgid = stunnel4
+; /etc/stunnel/logunify.conf : TLS terminator in front of the LogUnify TCP listener (which has no TLS and no authentication).
+; MUTUAL TLS: only hosts holding a certificate issued by YOUR CA (make-certs.sh) can send; everyone else is dropped at the handshake.
+; Start with:  sudo systemctl enable --now stunnel@logunify        (Debian/Ubuntu stunnel4 package: one unit per /etc/stunnel/<name>.conf)
+; The LogUnify listener stays on 127.0.0.1:5514 (LOGUNIFY_WINDOWS_LISTEN=127.0.0.1); only 6514 faces the network.
+; Verified here with stunnel 5.72: valid client cert delivered, no cert / foreign-CA cert / plain TCP delivered nothing. NXLog's om_ssl side was not run.
+foreground = yes
+setuid     = stunnel4
+setgid     = stunnel4
 
 [logunify-windows]
-accept     = 0.0.0.0:6514
-connect    = 127.0.0.1:5514
-cert       = /etc/stunnel/logunify-server.crt
-key        = /etc/stunnel/logunify-server.key
-CAfile     = /etc/stunnel/forwarders-ca.crt
-verifyChain = yes
-requireCert = yes
-sslVersion  = TLSv1.2
+accept        = 0.0.0.0:6514
+connect       = 127.0.0.1:5514
+cert          = /etc/stunnel/logunify-server.crt
+key           = /etc/stunnel/logunify-server.key
+CAfile        = /etc/stunnel/forwarders-ca.crt
+verifyChain   = yes
+requireCert   = yes
+sslVersionMin = TLSv1.2
