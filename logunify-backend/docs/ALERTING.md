@@ -219,3 +219,31 @@ actually searched, and the UI repeats it. For real history use your SIEM (Elasti
 **Saved searches** (`/api/v1/searches`, analyst): `logs` searches (the query above) and `alerts` searches (`status`, `assignee`, where `me` means the
 caller). Private by default, or shared with all analysts; only the owner (or an admin) changes a shared one; a private search of someone else is a 404.
 Relative ranges are evaluated when the search runs. They live in the alert database (per replica, like the alerts), so they need alerting enabled.
+
+
+## Calibration (dashboard `/calibration`, `GET /api/v1/alerts-calibration`)
+
+Two kinds of evidence, deliberately kept apart:
+
+* **Replay** re-runs the production rules (`AlertRules`) and the production grouping (technique family + asset, one alert per 30-minute quiet period)
+  over the events this instance still holds (`LOGUNIFY_RECENT_BUFFER`; raise it, e.g. 50,000, to replay days instead of minutes; memory grows
+  linearly). It shows the score histogram, a **funnel** (events > model warmed up > score above threshold > carries a technique > chosen by a rule >
+  critical technique > not suppressed: the step where the count collapses is what to fix), a **sweep** of alerts per threshold with projected alerts/day,
+  and a **preview** of the exact alerts a candidate threshold / critical set would have raised (try `threshold=` and `critical=`; scope it to one parser with
+  `format=` and a window with `from=-24h`). A replay cannot tell false positives from real ones.
+* **Feedback** is what analysts decided: closed alerts by resolution, false-positive rate per technique and per asset, the CERT-In on-time rate, overdue count,
+  alerts per day. It only exists for alerts that fired at the thresholds in force at the time, and small counts are flagged as unreliable.
+
+Every replay carries a **confidence** rating (`low` under 24 h or 1,000 events, `high` from 72 h and 5,000 events). The recommendation is the *lowest* threshold whose
+projected volume fits `capacity_per_day`; with a short window it refuses to project. It is advice: **the threshold and the critical set are never changed from
+the UI**, they stay `LOGUNIFY_ALERT_*` configuration changed deliberately and restarted. Techniques are only tagged above `LOGUNIFY_ANOMALY_THRESHOLD`
+(0.7), so a threshold below that behaves like 0.7.
+
+**Suppression rules** are the only runtime tuning: technique (or `*`) + asset pattern (`backup-*`, `10.2.0.*`), a reason of 10+ characters, an expiry of at most 90 days, **admin only**.
+The asset pattern must name something (no blanket rules; to stop a technique everywhere, remove it from the critical set in configuration). A suppressed event is still
+parsed, scored, stored and traceable; only the *alert* is skipped, and every hit is counted. Rules are never edited or deleted, only revoked, and they are persisted with the
+alerts, so they survive a restart. Hit counters are in memory and reset on restart. **A suppressed incident starts no CERT-In clock**: suppress only after a person confirmed the cause
+(the "Noisiest assets" table marks candidates: 3+ false positives and never a real incident).
+
+Suggested loop for a new source: send its logs for a few days (raise the buffer) > open Calibration scoped to that parser > read the funnel > preview candidates and review the
+sample rows > close real alerts with honest resolutions for a week or two > re-read feedback > change `LOGUNIFY_ALERT_*` or add reviewed suppressions.

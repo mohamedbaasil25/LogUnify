@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS saved_searches (
     id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, shared INTEGER NOT NULL DEFAULT 0,
     query TEXT NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS ix_searches_owner ON saved_searches(owner);
+CREATE TABLE IF NOT EXISTS suppressions (
+    id TEXT PRIMARY KEY, technique TEXT NOT NULL, asset TEXT NOT NULL, reason TEXT NOT NULL, created_by TEXT NOT NULL,
+    created_at REAL NOT NULL, expires_at REAL NOT NULL, revoked_at REAL, revoked_by TEXT);
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events
     BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
@@ -151,6 +154,33 @@ class AlertStore:
     def count_searches(self, owner: str) -> int:
         with self._lock:
             return self._db().execute("SELECT COUNT(*) FROM saved_searches WHERE owner=?", (owner,)).fetchone()[0]
+
+    # ---- suppressions (never deleted: a revoked rule stays as history) ---------------------------------------------------
+    _SUP_COLS = "id, technique, asset, reason, created_by, created_at, expires_at, revoked_at, revoked_by"
+
+    def put_suppression(self, r: dict) -> None:
+        with self._lock:
+            self._db().execute(
+                f"INSERT INTO suppressions({self._SUP_COLS}) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                "revoked_at=excluded.revoked_at, revoked_by=excluded.revoked_by",
+                (r["id"], r["technique"], r["asset"], r["reason"], r["created_by"], r["created_at"], r["expires_at"],
+                 r.get("revoked_at"), r.get("revoked_by")))
+
+    def list_suppressions(self) -> list[dict]:
+        if not self.exists():
+            return []
+        with self._lock:
+            rows = self._db().execute(f"SELECT {self._SUP_COLS} FROM suppressions ORDER BY created_at DESC").fetchall()
+        return [dict(zip(self._SUP_COLS.split(", "), r)) for r in rows]
+
+    def alerts_since(self, since: float, limit: int = 5000) -> list[Alert]:
+        """Every alert created at or after `since`, any status (calibration feedback)."""
+        if not self.exists():
+            return []
+        with self._lock:
+            rows = self._db().execute("SELECT data FROM alerts WHERE created_at >= ? ORDER BY created_at DESC LIMIT ?",
+                                      (since, limit)).fetchall()
+        return [Alert.from_json(r[0]) for r in rows]
 
     def close(self) -> None:
         with self._lock:

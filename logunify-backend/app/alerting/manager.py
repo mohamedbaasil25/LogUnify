@@ -24,14 +24,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ..integrity.merkle import hash_record
-from . import cert_in
+from . import calibration, cert_in
 from .messages import (Message, alert_summary, build_assignment_message, build_message, build_storm_message,
                        build_test_message)
 from .models import (ACTIVE, NOT_CLOSED, REPORT_CHANNELS, RESOLUTIONS, Alert, AlertNotFound, InvalidTransition)
 from .notifiers import DeliveryError, build_notifiers
 from .rules import AlertRules
 from .store import AlertStore
-from .validation import EMAIL_RE, parse_minutes
+from .validation import EMAIL_RE, TECHNIQUE_RE, parse_minutes
 
 log = logging.getLogger("logunify.alerting")
 _MAX_TEXT = 2000
@@ -110,11 +110,14 @@ class AlertManager:
         self._queue: asyncio.Queue | None = None
         self._tasks: list[asyncio.Task] = []
         self.counters: Counter = Counter()
+        self._suppressions: list[dict] = []          # active + history, newest first (small: tens of rows)
+        self._sup_hits: dict[str, dict] = {}         # id -> {hits, last_at, last_event_id}: in memory, reset by a restart
 
     # ---------------------------------------------------------------- lifecycle
     async def start(self) -> None:
         self._loop, self._queue = asyncio.get_running_loop(), asyncio.Queue()
         with self._lock:
+            self._suppressions = self.store.list_suppressions()
             for a in self.store.load(NOT_CLOSED):                 # restore: the 6-hour clocks survive a restart
                 self._alerts[a.id] = a
                 self._by_key[a.dedup_key] = a.id
@@ -157,6 +160,15 @@ class AlertManager:
         now = self._clock()
         key = hashlib.sha256(f"{trig.technique_id.split('.')[0]}|{cert_in.asset_key(doc)}".encode()).hexdigest()[:16]
         with self._lock:
+            if self._suppressions and (sup := calibration.is_suppressed(self._suppressions, trig.technique_id, doc, now)):
+                h = self._sup_hits.setdefault(sup["id"], {"hits": 0, "last_at": None, "last_event_id": None})
+                h["hits"] += 1
+                h["last_at"], h["last_event_id"] = now, (doc.get("event") or {}).get("id")
+                self.counters["suppressed_by_rule"] += 1
+                if h["hits"] in (1, 10, 100) or h["hits"] % 1000 == 0:
+                    log.info("alert suppressed by rule %s (%s on %s): %d hit(s); the event is still stored and traceable",
+                             sup["id"], trig.technique_id, sup["asset"], h["hits"])
+                return None
             current = self._alerts.get(self._by_key.get(key, ""))
             if current is not None and now - current.last_seen_at <= self.dedup_s:
                 current.occurrences += 1
@@ -508,6 +520,57 @@ class AlertManager:
             self._dirty.discard(a.id)
             self.store.save(a, ("closed", by, {"resolution": resolution, "note": note, "client": client}, now))
             return a
+
+    # ---------------------------------------------------------------- suppression rules (tuning)
+    MAX_SUPPRESSION_DAYS = 90
+
+    def add_suppression(self, by: str, technique: str, asset: str, reason: str, days: int) -> dict:
+        """Stop alerts for ONE technique on assets matching a pattern, for a limited time. This is a compliance decision, so: a reason of
+        10+ characters, an expiry (max 90 days), no blanket rules (the asset pattern must name something), and the rule is permanent
+        history (revoking keeps the row). The events themselves are still processed, stored and traceable; only the alert is skipped."""
+        technique, asset, reason = (technique or "").strip().upper(), (asset or "").strip(), (reason or "").strip()
+        if technique != "*" and not TECHNIQUE_RE.match(technique):
+            raise ValueError("technique must be a MITRE id such as T1070 or T1070.001 (or * for any)")
+        if not asset or len(asset) > 100 or any(ord(c) < 32 for c in asset):
+            raise ValueError("asset must be a host name / IP pattern of 1-100 characters (* and ? wildcards)")
+        if asset.strip("*?") == "":
+            raise ValueError("the asset pattern must name something (e.g. backup-*, 10.2.0.*): to stop alerting on a technique everywhere, "
+                             "remove it from LOGUNIFY_ALERT_CRITICAL_TECHNIQUES instead (a deliberate, reviewed config change)")
+        if len(reason) < 10:
+            raise ValueError("a suppression needs a reason of at least 10 characters (it is audited)")
+        if not 1 <= days <= self.MAX_SUPPRESSION_DAYS:
+            raise ValueError(f"days must be 1-{self.MAX_SUPPRESSION_DAYS}: suppressions expire so they are reviewed")
+        now = self._clock()
+        rec = {"id": "SUP-" + secrets.token_hex(4), "technique": technique, "asset": asset, "reason": reason, "created_by": by,
+               "created_at": now, "expires_at": now + days * 86400, "revoked_at": None, "revoked_by": None}
+        with self._lock:
+            self.store.put_suppression(rec)
+            self._suppressions.insert(0, rec)
+        log.warning("alert suppression %s created by %s: %s on %s until %s (%s)", rec["id"], by, technique, asset,
+                    datetime.fromtimestamp(rec["expires_at"], cert_in.IST).strftime("%Y-%m-%d"), reason[:80])
+        return rec
+
+    def revoke_suppression(self, sup_id: str, by: str) -> dict:
+        with self._lock:
+            rec = next((r for r in self._suppressions if r["id"] == sup_id), None)
+            if rec is None:
+                raise AlertNotFound(sup_id)
+            if rec["revoked_at"]:
+                raise InvalidTransition("suppression is already revoked")
+            rec["revoked_at"], rec["revoked_by"] = self._clock(), by
+            self.store.put_suppression(rec)
+        log.warning("alert suppression %s revoked by %s", sup_id, by)
+        return dict(rec)
+
+    def list_suppressions(self) -> list[dict]:
+        now = self._clock()
+        with self._lock:
+            return [{**r, "active": not r["revoked_at"] and r["expires_at"] > now, **self._sup_hits.get(r["id"], {"hits": 0, "last_at": None, "last_event_id": None})}
+                    for r in self._suppressions]
+
+    def active_suppressions(self) -> list[dict]:
+        with self._lock:
+            return list(self._suppressions)
 
     # ---------------------------------------------------------------- queries
     def list_alerts(self, status: str | None = None, limit: int = 50, assignee: str | None = None) -> list[dict]:

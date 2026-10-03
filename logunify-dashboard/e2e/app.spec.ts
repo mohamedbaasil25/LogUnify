@@ -134,6 +134,51 @@ test.describe("analyst workflow: ownership, notes, search", () => {
   });
 });
 
+test.describe("alert calibration", () => {
+  test("replay shows funnel, sweep and preview; feedback and suppression rules work", async ({ page, request }) => {
+    const id = await raiseAlert(request);
+    const close = await request.post(`${API}/api/v1/alerts/${id}/close`, { headers: auth("analyst"), data: { by: "e2e", resolution: "false_positive", note: "e2e: known nightly job clears the log" } });
+    expect(close.ok()).toBeTruthy();
+    await signedIn(page, "admin", { sub: "boss" });
+    await page.goto("/calibration");
+    await expect(page.getByRole("heading", { name: "Alert calibration", level: 1 })).toBeVisible();
+    await expect(page.getByTestId("confidence")).toContainText(/confidence/i);
+    await expect(page.getByRole("heading", { name: "Why alerts do or do not fire" })).toBeVisible();
+    await expect(page.getByRole("table", { name: /at each threshold/ })).toBeVisible();
+    await expect(page.getByTestId("recommendation")).not.toBeEmpty();
+    await expect(page.getByRole("img", { name: /Histogram of anomaly scores/ })).toBeVisible();
+    // a candidate threshold is previewed without changing configuration
+    await page.getByLabel(/Candidate threshold/).fill("0.5");
+    await page.getByRole("button", { name: "Run replay" }).click();
+    await expect(page.getByRole("img", { name: /Histogram/ })).toContainText("candidate");
+    await expect(page.getByRole("heading", { name: /Analyst feedback/ })).toBeVisible();
+    await expect(page.getByText("False-positive rate")).toBeVisible();
+    // an admin creates, then revokes, a suppression rule
+    const form = page.getByRole("form", { name: "New suppression rule" });
+    await form.getByLabel(/Technique/).fill("T1070");
+    await form.getByLabel(/Asset pattern/).fill(`e2e-${Date.now()}-*`);
+    await form.getByLabel(/Reason/).fill("e2e: nightly backup rotates the audit log");
+    await form.getByRole("button", { name: "Create rule" }).click();
+    await expect(page.getByRole("status").filter({ hasText: /^Created SUP-/ })).toBeVisible();
+    await page.getByRole("button", { name: "Revoke" }).first().click();
+    await expect(page.getByRole("status").filter({ hasText: /^Revoked SUP-/ })).toBeVisible();
+    // blanket rules are refused by the server
+    const blanket = await request.post(`${API}/api/v1/suppressions`, { headers: auth("admin"), data: { technique: "T1070", asset: "*", reason: "switch everything off please", days: 30 } });
+    expect(blanket.status()).toBe(422);
+  });
+
+  test("analysts can read calibration but not create suppression rules; viewers are refused", async ({ page, request }) => {
+    const rule = { technique: "T1070", asset: "x-*", reason: "analyst should not be able to do this", days: 7 };
+    expect((await request.post(`${API}/api/v1/suppressions`, { headers: auth("analyst"), data: rule })).status()).toBe(403);
+    expect((await request.get(`${API}/api/v1/alerts-calibration`, { headers: auth("viewer") })).status()).toBe(403);
+    await signedIn(page, "analyst");
+    await page.goto("/calibration");
+    await expect(page.getByTestId("confidence")).toBeVisible();
+    await expect(page.getByRole("form", { name: "New suppression rule" })).toHaveCount(0);
+    await expect(page.getByText("Creating or revoking rules needs the admin role.")).toBeVisible();
+  });
+});
+
 test.describe("trace and operations", () => {
   test("a record is traced to the bytes received", async ({ page, request }) => {
     const doc = await ingest(request, "Oct  3 10:00:00 host1 sshd[42]: Accepted password for alice from 198.51.100.7 port 4022 ssh2");
@@ -162,7 +207,7 @@ test.describe("governance", () => {
 
 test.describe("accessibility (axe, WCAG 2 A/AA)", () => {
   const pages: [string, "viewer" | "analyst" | "admin" | null][] = [
-    ["/login", null], ["/", "analyst"], ["/alerts", "analyst"], ["/search", "analyst"], ["/trace", "analyst"], ["/operations", "admin"], ["/governance", "admin"],
+    ["/login", null], ["/", "analyst"], ["/alerts", "analyst"], ["/search", "analyst"], ["/calibration", "analyst"], ["/trace", "analyst"], ["/operations", "admin"], ["/governance", "admin"],
   ];
   for (const [path, role] of pages) {
     test(`no violations on ${path}`, async ({ page }) => {

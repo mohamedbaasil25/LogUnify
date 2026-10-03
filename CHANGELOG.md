@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Alert calibration:** dashboard `/calibration` + `GET /api/v1/alerts-calibration` (replay funnel, threshold sweep, candidate preview, confidence, analyst feedback incl. CERT-In on-time rate) and admin-only, time-limited, audited suppression rules.
 - **Analyst workflow:** alert assignment (+ owner filter, notice to channels / assignee mailbox), append-only case notes, Slack and Teams channels, log search with a time range over the events held, saved searches (private / shared); dashboard: Owner column, Mine / Unassigned, notes panel, new Search page. E2E + axe cover them.
 - **State:** optional PostgreSQL backend (`LOGUNIFY_STATE_DATABASE_URL`, schema per replica, advisory-lock ownership, reconnect); SQLite default unchanged (schema v2, v1 files upgrade in place).
 - **Models survive restarts:** Drain3 templates and the Isolation Forest training window are persisted, HMAC-signed and verified before loading.

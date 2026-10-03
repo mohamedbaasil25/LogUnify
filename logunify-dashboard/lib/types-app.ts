@@ -166,3 +166,94 @@ export interface ComplianceReport {
   summary: Record<string, { met: number; partial: number; gap: number; manual: number }>;
   controls: ComplianceControl[];
 }
+
+// ---- alert calibration ----------------------------------------------------------------------------------------------------
+export interface SweepRow {
+  threshold: number;
+  events: number;
+  alerts: number;
+  suppressed: number;
+  techniques: Record<string, number>;
+  alerts_per_day: number | null;
+}
+export interface PreviewAlert {
+  technique: string;
+  technique_name: string;
+  asset: string;
+  host: string | null;
+  score: number;
+  at: string | null;
+  occurrences: number;
+  basis: string;
+  event_id: string | null;
+  message: string;
+}
+export interface Suppression {
+  id: string;
+  technique: string;
+  asset: string;
+  reason: string;
+  created_by: string;
+  created_at: number;
+  expires_at: number;
+  revoked_at: number | null;
+  revoked_by: string | null;
+  active: boolean;
+  hits: number;
+  last_at: number | null;
+  last_event_id: string | null;
+}
+export interface FeedbackTechnique {
+  technique: string;
+  closed: number;
+  false_positive: number;
+  not_reportable: number;
+  resolved: number;
+  fp_rate: number | null;
+}
+export interface NoisyAsset {
+  technique: string;
+  asset: string;
+  closed: number;
+  false_positive: number;
+  not_reportable: number;
+  resolved: number;
+  candidate: boolean;
+}
+export interface Calibration {
+  configured: { threshold: number; critical_techniques: string[]; require_rule_basis: boolean; dedup_minutes: number; tagging_threshold: number | null };
+  candidate: { threshold: number; critical_techniques: string[] };
+  scope: { format: string | null; from: string | null; feedback_days: number };
+  replay: {
+    coverage: { events_held: number; events_in_scope: number; buffer: number; oldest: number | null; newest: number | null; note: string };
+    confidence: { level: "low" | "medium" | "high"; window_hours: number; events: number; why: string };
+    model_ready_events: number;
+    histogram: { from: number; to: number; count: number }[];
+    percentiles: Record<string, number>;
+    funnel: { step: string; count: number; why: string }[];
+    sweep: SweepRow[];
+    recommendation: { threshold: number | null; text: string };
+    preview: { alerts: number; events: number; suppressed: number; items: PreviewAlert[]; truncated: boolean };
+    note: string;
+  };
+  feedback: {
+    alerts_total: number;
+    closed: number;
+    resolutions: Record<string, number>;
+    false_positive_rate: number | null;
+    techniques: FeedbackTechnique[];
+    noisiest_assets: NoisyAsset[];
+    cert_in: { reported: number; on_time: number; on_time_rate: number | null; overdue_now: number; active_now: number };
+    since_days: number;
+    per_day: { day: string; alerts: number }[];
+  };
+  suppressions: Suppression[];
+}
+export interface CalibrationParams {
+  threshold?: string;
+  critical?: string;
+  format?: string;
+  from?: string;
+  feedback_days?: string;
+  capacity_per_day?: string;
+}

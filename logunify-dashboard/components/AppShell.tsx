@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, ClipboardList, Fingerprint, LayoutDashboard, LogOut, Search, Settings2, ShieldCheck, Timer } from "lucide-react";
+import { Bell, ClipboardList, Fingerprint, LayoutDashboard, LogOut, SlidersHorizontal, Search, Settings2, ShieldCheck, Timer } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -12,6 +12,7 @@ import { usePoll } from "@/lib/usePoll";
 const NAV: { href: string; label: string; icon: typeof Bell; min: Role }[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard, min: "viewer" },
   { href: "/alerts", label: "Alerts", icon: Bell, min: "analyst" },
+  { href: "/calibration", label: "Calibration", icon: SlidersHorizontal, min: "analyst" },
   { href: "/search", label: "Search", icon: Search, min: "analyst" },
   { href: "/trace", label: "Trace", icon: Fingerprint, min: "analyst" },
   { href: "/operations", label: "Operations", icon: Settings2, min: "analyst" },

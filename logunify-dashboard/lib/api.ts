@@ -1,4 +1,4 @@
-import type { AlertEvent, AlertNote, AlertSummary, AlertView, LogQuery, LogSearchResult, SavedSearch, AuditRow, CertReport, ComplianceReport, DlqView, Me, SystemInfo, TraceResult } from "./types-app";
+import type { AlertEvent, AlertNote, Calibration, CalibrationParams, Suppression, AlertSummary, AlertView, LogQuery, LogSearchResult, SavedSearch, AuditRow, CertReport, ComplianceReport, DlqView, Me, SystemInfo, TraceResult } from "./types-app";
 import type { ParserInfo, AuditResult, BatchList, LogSource, Metrics, ProofBundle, RecentLogs, SourceCreate, ThroughputSeries, VerifyResult } from "./types";
 
 /** Errors carry the backend's message (FastAPI `detail`, string or validation list). */
@@ -99,6 +99,15 @@ export const api = {
   alertReported: (id: string, by: string, via: string, reference: string, note: string) =>
     post<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}/report`, { by, via, reference, note }),
   alertClose: (id: string, by: string, resolution: string, note: string) => post<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}/close`, { by, resolution, note }),
+
+  // ---- calibration / suppressions
+  calibration: (q: CalibrationParams, signal?: AbortSignal) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v) p.set(k, v);
+    return request<Calibration>(`/api/v1/alerts-calibration?${p}`, { signal });
+  },
+  createSuppression: (body: { technique: string; asset: string; reason: string; days: number }) => post<Suppression>("/api/v1/suppressions", body),
+  revokeSuppression: (id: string) => request<Suppression>(`/api/v1/suppressions/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   // ---- search / saved searches
   logSearch: (q: LogQuery, limit = 100, offset = 0, signal?: AbortSignal) => {
