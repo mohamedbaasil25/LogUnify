@@ -54,14 +54,19 @@ rules:
   - when: {field: EventID, equals: 4719}
     set: {event.category: [configuration], event.type: [change], event.action: audit-policy-changed}
     copy: {user.name: SubjectUserName}
+  # these events carry no TargetUserName: the account is the SUBJECT
   - when: {field: EventID, equals: 4672}
     set: {event.category: [iam], event.type: [admin], event.action: special-privileges-assigned}
+    copy: {user.name: SubjectUserName}
   - when: {field: EventID, equals: 4688}
     set: {event.category: [process], event.type: [start], event.action: process-created}
+    copy: {user.name: SubjectUserName}
   - when: {field: EventID, in: [4697, 7045]}
     set: {event.category: [configuration], event.type: [installation], event.action: service-installed}
-  - when: {field: EventID, equals: 1102}
+    copy: {user.name: SubjectUserName}
+  - when: {field: EventID, in: [1102, 104]}
     set: {event.category: [configuration], event.type: [change], event.action: audit-log-cleared}
+    copy: {user.name: SubjectUserName}
 static:
   event.kind: event
   event.module: windows

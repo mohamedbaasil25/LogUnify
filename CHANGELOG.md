@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Windows Security deployment pack** (`deploy/windows-security/`): audit-policy and NXLog installer scripts (dry-run by default), stunnel mutual-TLS example, env template, and `scripts/verify_windows_onboarding.py` (service / source / loss / parsed fields / time zone vs backlog / event mix / buffer horizon). Parser now sets `user.name` from the subject for 4672 / 4688 / 4697 / 7045 / 1102 / 104.
 - **Windows Security onboarding:** runbook (`docs/WINDOWS_SECURITY.md`), compose overlay, synthetic sender; parser accepts NXLog `Hostname`; event-ID MITRE rules (log cleared, privileged group add, audit policy change); parser SDK `copy` / `first_of`; **recent-events log now saved incrementally** (a 10k buffer flush went 570 ms to 15 ms) and search no longer flattens every event.
 - **Alert calibration:** dashboard `/calibration` + `GET /api/v1/alerts-calibration` (replay funnel, threshold sweep, candidate preview, confidence, analyst feedback incl. CERT-In on-time rate) and admin-only, time-limited, audited suppression rules.
 - **Analyst workflow:** alert assignment (+ owner filter, notice to channels / assignee mailbox), append-only case notes, Slack and Teams channels, log search with a time range over the events held, saved searches (private / shared); dashboard: Owner column, Mine / Unassigned, notes panel, new Search page. E2E + axe cover them.

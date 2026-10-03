@@ -19,5 +19,6 @@
   "labels.subject_user": "backdoor",
   "logunify.parser.name": "windows_security",
   "logunify.source_format": "windows_security",
-  "message": "The audit log was cleared."
+  "message": "The audit log was cleared.",
+  "user.name": "backdoor"
 }

@@ -61,6 +61,7 @@ def main() -> int:
     ap.add_argument("--rate", type=int, default=0, help="events/second (0 = as fast as the listener accepts)")
     ap.add_argument("--rare", type=float, default=0.002, help="share of rare critical events")
     ap.add_argument("--utc-offset", type=float, default=5.5, help="hours: NXLog writes EventTime in the host's LOCAL time (default IST)")
+    ap.add_argument("--realtime", action="store_true", help="stamp each event with the current time (default: spread over the last COUNT seconds, a backlog)")
     ap.add_argument("--seed", type=int, default=7)
     a = ap.parse_args()
     rng, local_tz = random.Random(a.seed), timezone(timedelta(hours=a.utc_offset))
@@ -69,7 +70,7 @@ def main() -> int:
     with socket.create_connection((a.host, a.port), timeout=10) as s:
         batch = []
         for i in range(a.count):
-            ev = event(rng, t0 + timedelta(seconds=i), rng.random() < a.rare, local_tz)
+            ev = event(rng, datetime.now(timezone.utc) if a.realtime else t0 + timedelta(seconds=i), rng.random() < a.rare, local_tz)
             batch.append(json.dumps(ev, separators=(",", ":")) + "\n")
             if len(batch) >= 200:
                 s.sendall("".join(batch).encode())
