@@ -19,6 +19,7 @@
   "host.name": "DC01.corp.example.com",
   "labels.logon_type": 3,
   "labels.status": "0xc000006d",
+  "labels.target_name": "administrator",
   "labels.workstation": "KALI",
   "logunify.parser.name": "windows_security",
   "logunify.source_format": "windows_security",

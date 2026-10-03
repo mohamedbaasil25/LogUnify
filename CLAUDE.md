@@ -36,6 +36,7 @@ logunify-dashboard (Next.js) ──► SOC console over the backend API (proxied
 | `logunify-backend/docs/CONFIGURATION.md` | where every secret comes from (env vars / secret files), generation and rotation |
 | `logunify-backend/docs/FORWARDING.md` | Python ES Bulk forwarder: guarantees, retry table, dead-letter, verification status |
 | `logunify-backend/docs/STATE.md` | what is persisted, flush design, failure behaviour, limits |
+| `logunify-backend/docs/WINDOWS_SECURITY.md` | onboarding the Windows Security log: NXLog, audit policy, source setup, sizing (measured), calibration routine |
 | `logunify-backend/docs/SECURITY.md` | PII redaction, RBAC, audit log, compliance report: behaviour and limits |
 | `logunify-backend/scripts/` | `alert_threshold_survey.py`, `dev_alert_sink.py` |
 | `logunify-dashboard/` | `app/`, `components/` (MetricCards, LogStream, SourceConfigurator, SourceList, IntegrityVerifier, Badges, AlertsView, SearchView, CalibrationView), `lib/` (api, types, usePoll, format) |

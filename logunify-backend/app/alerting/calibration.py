@@ -60,6 +60,7 @@ def is_suppressed(sup: list[dict], technique_id: str, doc: dict, now: float) -> 
 def group_alerts(docs: list[dict], rules: AlertRules, dedup_s: float, suppressions: list[dict] | None = None, now: float = 0.0) -> dict:
     """Run the rules over `docs` (oldest first) and group like production: one alert per (technique family, asset), repeats inside
     `dedup_s` of the previous hit are absorbed. Returns {alerts: [...], events: n, suppressed: n}."""
+    docs = _candidates(docs, rules.threshold)
     last: dict[tuple, float] = {}
     alerts: list[dict] = []
     open_alert: dict[tuple, dict] = {}
@@ -114,9 +115,17 @@ def funnel(docs: list[dict], rules: AlertRules, suppressions: list[dict] | None 
     ]
 
 
+def _candidates(docs: list[dict], floor: float) -> list[dict]:
+    """Only events above the lowest threshold of interest can ever alert: filtering once (a cheap dict lookup) keeps a 50,000-event
+    replay fast, because the full rule evaluation and the timestamp parsing then run on a few hundred events, not all of them."""
+    return [d for d in docs if isinstance((sc := get(d, "logunify", "anomaly", "score")), (int, float)) and not isinstance(sc, bool) and sc > floor]
+
+
 def sweep(docs: list[dict], rules: AlertRules, dedup_s: float, thresholds=SWEEP, suppressions=None, now: float = 0.0) -> list[dict]:
     out = []
-    for thr in sorted({round(t, 4) for t in thresholds}):
+    thresholds = sorted({round(t, 4) for t in thresholds})
+    docs = _candidates(docs, thresholds[0] if thresholds else rules.threshold)
+    for thr in thresholds:
         r = AlertRules(thr, rules.critical, rules.require_rule_basis)
         g = group_alerts(docs, r, dedup_s, suppressions, now)
         techs = Counter(a["technique"] for a in g["alerts"])

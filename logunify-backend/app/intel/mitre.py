@@ -38,7 +38,29 @@ def _auth(outcome: str, external_source: bool = False) -> Callable[[dict, str], 
     return check
 
 
+def _win(codes: tuple[int, ...], also: Callable[[dict], bool] | None = None) -> Callable[[dict, str], bool]:
+    """A Windows event-ID rule: keyed on the STRUCTURED `event.code`, so it works regardless of the OS display language or message text."""
+    want = {str(c) for c in codes}
+
+    def check(fields: dict, _text: str) -> bool:
+        return fields.get("event.module") == "windows" and str(fields.get("event.code")) in want and (also is None or also(fields))
+    return check
+
+
+_PRIV_GROUP_NAME = re.compile(r"^(domain admins|enterprise admins|schema admins|administrators|account operators|backup operators|server operators|dnsadmins)$", re.I)
+# well-known group SIDs: local Administrators / Account / Server / Backup Operators, and the domain's Domain / Schema / Enterprise Admins (RIDs 512/518/519)
+_PRIV_GROUP_SID = re.compile(r"^(S-1-5-32-(544|548|549|551)|S-1-5-21-[\d-]+-(512|518|519))$")
+
+
+def _privileged_group(f: dict) -> bool:
+    return bool(_PRIV_GROUP_NAME.match(str(f.get("labels.target_name") or "").strip()) or _PRIV_GROUP_SID.match(str(f.get("labels.target_sid") or "").strip()))
+
+
 RULES: list[Rule] = [
+    # Windows, by event ID (see parsers/builtin/windows_security.yaml). First because structured fields beat keyword guesses.
+    Rule("win_log_cleared", ("T1070.001", "Indicator Removal: Clear Windows Event Logs", "Defense Evasion"), _win((1102, 104))),
+    Rule("win_privileged_group_add", ("T1098", "Account Manipulation", "Persistence, Privilege Escalation"), _win((4728, 4732, 4756), _privileged_group)),
+    Rule("win_audit_policy_changed", ("T1562.002", "Impair Defenses: Disable Windows Event Logging", "Defense Evasion"), _win((4719,))),
     Rule("log_clearing", ("T1070", "Indicator Removal", "Defense Evasion"), _rx(
         r"\b(audit|event|security|system|auth|syslog)\s+logs?\s+(was\s+|were\s+|has\s+been\s+)?"
         r"(clear(ed)?|delet(ed)?|wip(ed)?|truncat(ed)?|purg(ed)?)\b|\bwevtutil(\.exe)?\s+cl\b|\bclear-eventlog\b|\bhistory\s+-c\b")),

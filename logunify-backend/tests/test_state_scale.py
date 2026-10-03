@@ -243,3 +243,66 @@ def test_rate_limit_falls_back_to_local_when_redis_is_down():
     got, dt = run(go())
     assert got == [True, True, True, False, False] and r.errors == 5                        # still enforced per replica
     assert dt < 2.5                                                                          # and never hangs the API
+
+
+# ---------------------------------------------------------------------------------------------- incremental recent-events log
+def _positions(path):
+    return [r[0] for r in sqlite3.connect(path).execute("SELECT pos FROM docs WHERE kind='recent' ORDER BY pos")]
+
+
+def test_recent_log_is_saved_incrementally_and_pruned_to_the_buffer(tmp_path):
+    with TestClient(make(tmp_path, recent_buffer=50, state_hmac_key=KEY)) as c:
+        feed(c, 40)
+        r1 = flush(c)
+        feed(c, 10)
+        r2 = flush(c)
+        assert r2["rows_written"] < r1["rows_written"]                                         # not a rewrite of the buffer (the rest is the open Merkle batch)
+        feed(c, 30)                                                                            # 80 seen, buffer holds 50
+        flush(c)
+        assert _positions(tmp_path / "state.db") == list(range(30, 80))                        # old rows pruned, positions never reused
+        recent = c.get("/api/v1/logs/recent", params={"limit": 1000}).json()["items"]
+        assert len(recent) == 50
+    with TestClient(make(tmp_path, recent_buffer=50, state_hmac_key=KEY)) as c2:               # restart: same events back, numbering continues
+        again = c2.get("/api/v1/logs/recent", params={"limit": 1000}).json()["items"]
+        assert [d["event"]["original"] for d in again] == [d["event"]["original"] for d in recent]
+        assert c2.app.state.pipeline.recent_total == 80
+        feed(c2, 5)
+        flush(c2)
+        assert _positions(tmp_path / "state.db") == list(range(35, 85))
+
+
+def test_recent_log_survives_a_burst_larger_than_the_buffer_between_flushes(tmp_path):
+    with TestClient(make(tmp_path, recent_buffer=20)) as c:
+        feed(c, 100)                                                                           # ring wrapped 5x before the first flush
+        flush(c)
+        assert _positions(tmp_path / "state.db") == list(range(80, 100))
+
+
+def test_raising_the_buffer_keeps_what_was_saved(tmp_path):
+    with TestClient(make(tmp_path, recent_buffer=30)) as c:
+        feed(c, 30)
+    with TestClient(make(tmp_path, recent_buffer=500)) as c2:
+        assert len(c2.get("/api/v1/logs/recent", params={"limit": 1000}).json()["items"]) == 30
+        feed(c2, 20)
+    with TestClient(make(tmp_path, recent_buffer=500)) as c3:
+        assert len(c3.get("/api/v1/logs/recent", params={"limit": 1000}).json()["items"]) == 50
+
+
+def test_lowering_the_buffer_trims_on_load_and_prunes_on_disk(tmp_path):
+    with TestClient(make(tmp_path, recent_buffer=100)) as c:
+        feed(c, 60)
+    with TestClient(make(tmp_path, recent_buffer=25)) as c2:
+        assert len(c2.get("/api/v1/logs/recent", params={"limit": 1000}).json()["items"]) == 25
+        flush(c2)
+    assert _positions(tmp_path / "state.db") == list(range(35, 60))
+
+
+def test_old_full_rewrite_state_files_still_load(tmp_path):
+    with TestClient(make(tmp_path, recent_buffer=100)) as c:
+        feed(c, 12)
+    db = sqlite3.connect(tmp_path / "state.db")                                                # what a pre-incremental build wrote: positions 0..n-1
+    assert _positions(tmp_path / "state.db") == list(range(12))
+    db.close()
+    with TestClient(make(tmp_path, recent_buffer=100)) as c2:
+        assert len(c2.get("/api/v1/logs/recent", params={"limit": 1000}).json()["items"]) == 12
+        assert c2.app.state.pipeline.recent_total == 12

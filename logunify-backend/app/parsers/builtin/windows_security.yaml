@@ -1,20 +1,21 @@
-# Windows Security event log as JSON from NXLog / Winlogbeat-style shippers (one event per line, Security channel).
+# Windows event log as JSON, one event per line: NXLog `to_json()` field names (EventTime, Hostname, EventID, Channel, SourceName, TargetUserName ...).
+# `Computer` is accepted as an alternative host field. Winlogbeat's nested `winlog.*` format is NOT supported by this parser.
 # Mapped by EventID: logon 4624/4625/4634/4647/4648, lockout 4740, account/group changes, process creation 4688, service install 7045/4697,
 # audit-log cleared 1102 (a classic anti-forensics signal).
 name: windows_security
 version: "1.0.0"
 kind: json
-description: Windows Security event log (JSON; NXLog / Winlogbeat field names)
+description: Windows event log (JSON; NXLog field names)
 priority: 25
 sniff:
-  keys: [EventID, Channel, Computer]
+  keys: [EventID, Channel]
   confidence: 0.98
 timestamp:
   path: EventTime
   format: "%Y-%m-%d %H:%M:%S"
 message_path: Message
 fields:
-  host.name:           {path: Computer}
+  host.name:           {first_of: [Computer, Hostname]}     # NXLog writes Hostname; Computer (the event's own field) wins when both exist
   event.code:          {path: EventID}
   event.provider:      {path: SourceName}
   user.name:           {path: TargetUserName}
@@ -24,6 +25,9 @@ fields:
   process.name:        {path: NewProcessName}
   process.command_line: {path: CommandLine}
   process.parent.name: {path: ParentProcessName}
+  labels.target_name:  {path: TargetUserName}      # for group / account events this is the group or account acted ON (user.name keeps it too)
+  labels.target_sid:   {path: TargetSid}
+  labels.member_name:  {path: MemberName}
   labels.logon_type:   {path: LogonType}
   labels.subject_user: {path: SubjectUserName}
   labels.workstation:  {path: WorkstationName}
@@ -37,12 +41,19 @@ rules:
     set: {event.category: [authentication], event.type: [end], event.outcome: success}
   - when: {field: EventID, equals: 4740}
     set: {event.category: [iam], event.type: [change], event.action: account-locked-out}
+  # account / group management: the ACTOR is SubjectUserName, TargetUserName is the account or group acted on (copy re-points user.name)
   - when: {field: EventID, in: [4720]}
     set: {event.category: [iam], event.type: [user, creation], event.action: user-created}
+    copy: {user.name: SubjectUserName, user.target.name: TargetUserName}
   - when: {field: EventID, in: [4726]}
     set: {event.category: [iam], event.type: [user, deletion], event.action: user-deleted}
+    copy: {user.name: SubjectUserName, user.target.name: TargetUserName}
   - when: {field: EventID, in: [4728, 4732, 4756]}
     set: {event.category: [iam], event.type: [group, change], event.action: group-member-added}
+    copy: {user.name: SubjectUserName, group.name: TargetUserName}
+  - when: {field: EventID, equals: 4719}
+    set: {event.category: [configuration], event.type: [change], event.action: audit-policy-changed}
+    copy: {user.name: SubjectUserName}
   - when: {field: EventID, equals: 4672}
     set: {event.category: [iam], event.type: [admin], event.action: special-privileges-assigned}
   - when: {field: EventID, equals: 4688}

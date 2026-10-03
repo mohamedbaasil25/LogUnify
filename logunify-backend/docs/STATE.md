@@ -8,7 +8,7 @@ listener starts:
 | event sources | the plaintext HTTP token is **never** written: only its SHA-256 (ingest compares hashes), so a restored source keeps working with the token it was issued. Syslog sources re-bind their ports |
 | IOC feeds `manual`, `misp` | demo feeds (`mock*`) are not saved; a saved `misp` feed is restored only if MISP is still configured (otherwise nothing could refresh it) |
 | Merkle batches, open batch, batch sequence, ledger anchors | ids never repeat after a restart; proofs and anchors survive; restored batches are re-hashed and a mismatch with the sealed root is logged and shown by `/integrity/batches/{id}/audit` |
-| recent logs, anomalies | optional (`LOGUNIFY_STATE_PERSIST_LOGS`); already PII-redacted |
+| recent logs, anomalies | optional (`LOGUNIFY_STATE_PERSIST_LOGS`); already PII-redacted. The recent-events log is saved **incrementally** (only events newer than the last flush are written, rows older than the buffer are pruned), so a 50,000-event buffer costs the same per flush as a small one; anomalies (200) are rewritten whole |
 
 | learned models | Drain3 templates (snapshot) and the Isolation Forest training window (feature vectors, JSON). Saved at most every `LOGUNIFY_STATE_MODEL_INTERVAL_S` (60 s) and on shutdown; after a restart templates keep their ids and the forest is refitted from the window, so scoring is live immediately instead of after the warm-up. **Needs an HMAC key** (below) |
 

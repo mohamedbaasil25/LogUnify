@@ -5,7 +5,8 @@ What is saved                       how it is detected as changed         notes
   IOC feeds (manual, misp)           the feed's list object was replaced   demo feeds ("mock*") are not saved; big feeds cost nothing when unchanged
   Merkle batches + open batch        batch id / anchor changed             the batch sequence counter is saved so ids never repeat
   ledger anchors                     new transaction ids                   pruned with their batch (audit-head anchors are kept)
-  recent logs, anomalies             (length, newest object) changed       optional (`state_persist_logs`); contents are already PII-redacted
+  recent logs                        APPENDED: only events newer than the last flush are written, old ones pruned (cost ~ new events, not buffer size)
+  anomalies                          (length, newest object) changed       optional (`state_persist_logs`); contents are already PII-redacted
   learned models                     samples/templates changed, throttled  Drain3 snapshot + Isolation Forest training window, HMAC-signed; a blob that fails
                                                                            the signature is ignored (never deserialised) and the model re-learns
 
@@ -33,6 +34,8 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
+
+from itertools import islice
 
 from .backend import make_backend
 from ..integrity.batcher import Batch
@@ -79,6 +82,7 @@ class _Markers:
     batches: dict[str, str | None] = field(default_factory=dict)  # id -> anchor tx id (or None)
     anchors: set[str] = field(default_factory=set)
     docs: dict[str, tuple[int, object]] = field(default_factory=dict)   # kind -> (len, newest object)
+    recent_total: int = 0                                               # recent events already on disk (the incremental `recent` log)
     models_mark: tuple | None = None                                    # (templates mined, IF samples) at the last model write
     models_at: float = 0.0                                              # monotonic time of the last model write
 
@@ -105,8 +109,10 @@ class StateStore:
                                        "(or LOGUNIFY_AUDIT_HMAC_KEY) so saved blobs can be authenticated before they are loaded")
 
     # ---- lifecycle ----------------------------------------------------------------------------------------------
-    def attach(self, *, sources, ti, batcher, ledger, recent: deque, anomalies: deque, intel=None) -> "StateStore":
-        self._c = dict(sources=sources, ti=ti, batcher=batcher, ledger=ledger, recent=recent, anomalies=anomalies, intel=intel)
+    def attach(self, *, sources, ti, batcher, ledger, recent: deque, anomalies: deque, intel=None, pipeline=None) -> "StateStore":
+        """`pipeline` (optional) supplies `recent_total` / `recent_lock`: with it the recent-events log is saved incrementally."""
+        self._c = dict(sources=sources, ti=ti, batcher=batcher, ledger=ledger, recent=recent, anomalies=anomalies, intel=intel,
+                       pipeline=pipeline)
         return self
 
     @property
@@ -200,7 +206,12 @@ class StateStore:
         out["batches"], out["pending_records"] = len(batches), len(pending)
 
         if self.persist_logs:
-            for kind, dq in (("recent", c["recent"]), ("anomaly", c["anomalies"])):
+            if c["pipeline"] is not None:
+                rows = await self._db.fetchall("SELECT pos, doc FROM docs WHERE kind='recent' ORDER BY pos")
+                c["recent"].extend(json.loads(d) for _, d in rows[-c["recent"].maxlen:])
+                total = (rows[-1][0] + 1) if rows else 0                      # positions only ever grow, also across restarts
+                c["pipeline"].recent_total = m.recent_total = total
+            for kind, dq in (("anomaly", c["anomalies"]),) if c["pipeline"] is not None else (("recent", c["recent"]), ("anomaly", c["anomalies"])):
                 docs = await self._docs(kind)
                 dq.extend(docs[-dq.maxlen:])
                 m.docs[kind] = (len(dq), dq[-1] if dq else None)
@@ -264,8 +275,15 @@ class StateStore:
                 "seq": seq, "batches": batches, "receipts": c["ledger"].snapshot(),
                 "docs": {"pending": pending}}
         if self.persist_logs:
-            snap["docs"]["recent"] = _copy_deque(c["recent"])
             snap["docs"]["anomaly"] = _copy_deque(c["anomalies"])
+            if (pl := c["pipeline"]) is not None:
+                with pl.recent_lock:                                       # counter and ring move together; copy only what is new
+                    total = pl.recent_total
+                    k = min(max(0, total - self._m.recent_total), len(c["recent"]))
+                    new = list(islice(reversed(c["recent"]), k))[::-1]
+                snap["recent"] = (total, new, c["recent"].maxlen)
+            else:
+                snap["docs"]["recent"] = _copy_deque(c["recent"])
         return snap
 
     def _plan(self, s: dict) -> dict:
@@ -295,6 +313,9 @@ class StateStore:
             if old is None or old[0] != mark[0] or old[1] is not mark[1]:
                 docs[kind] = ([(kind, i, _dumps(d)) for i, d in enumerate(lst)], mark)
         plan["docs"] = docs
+        if "recent" in s:
+            total, new, cap = s["recent"]
+            plan["recent"] = ([(total - len(new) + i, _dumps(d)) for i, d in enumerate(new)], total, total - cap)
         plan["seq"] = s["seq"]
         return plan
 
@@ -341,6 +362,12 @@ class StateStore:
                     await db.execute("DELETE FROM docs WHERE kind=?", (kind,))
                     await db.executemany("INSERT INTO docs(kind,pos,doc) VALUES (?,?,?)", rows)
                     written += len(rows)
+                if "recent" in plan:
+                    r_rows, r_total, r_floor = plan["recent"]
+                    if r_rows:
+                        await db.executemany("INSERT INTO docs(kind,pos,doc) VALUES ('recent',?,?) ON CONFLICT(kind,pos) DO UPDATE SET doc=excluded.doc", r_rows)
+                    await db.execute("DELETE FROM docs WHERE kind='recent' AND pos < ?", (r_floor,))
+                    written += len(r_rows)
                 await db.execute("INSERT INTO meta(key,value) VALUES ('batch_seq',?) "
                                  "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(plan["seq"]),))
                 if models:
@@ -359,6 +386,8 @@ class StateStore:
             m.anchors |= a_new
             for kind, (_rows, mark) in plan["docs"].items():
                 m.docs[kind] = mark
+            if "recent" in plan:
+                m.recent_total = plan["recent"][1]
             written += len(src_rows) + len(b_rows) + len(a_rows)
             self.st.update(flushes=self.st["flushes"] + 1, last_flush_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                            last_flush_ms=round((time.perf_counter() - t0) * 1000, 1), last_rows_written=written, last_error=None)

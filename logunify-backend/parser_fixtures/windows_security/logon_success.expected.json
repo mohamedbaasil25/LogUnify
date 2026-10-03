@@ -17,6 +17,7 @@
   ],
   "host.name": "WS-0042.corp.example.com",
   "labels.logon_type": 10,
+  "labels.target_name": "asmith",
   "logunify.parser.name": "windows_security",
   "logunify.source_format": "windows_security",
   "message": "An account was successfully logged on.",

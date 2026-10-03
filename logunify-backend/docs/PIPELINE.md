@@ -39,7 +39,7 @@ Limits: the archive queue is bounded (overflow is counted in `dropped`, not bloc
 ### Product parser library (declarative, each with golden fixtures in `parser_fixtures/`)
 | parser | input it expects | notes |
 |---|---|---|
-| `windows_security` | JSON per event (NXLog / Winlogbeat-style names: `EventID`, `Channel`, `Computer`, `TargetUserName`, `IpAddress`) | maps 4624/4625/4634/4647/4648, 4740, 4720/4726, 4728/4732/4756, 4672, 4688, 4697/7045, 1102 |
+| `windows_security` | JSON per event, NXLog `to_json()` names (`EventID`, `Channel`, `Hostname`/`Computer`, `TargetUserName`, `IpAddress`); not Winlogbeat's `winlog.*`. See `WINDOWS_SECURITY.md` | maps 4624/4625/4634/4647/4648, 4740, 4720/4726, 4728/4732/4756, 4672, 4688, 4697/7045, 1102 |
 | `linux_auditd` | `type=X msg=audit(epoch:serial): ...`, raw or behind a syslog/audispd header | outcome from `res=`; category by record type |
 | `okta_system_log` | one System Log event per line | outcome from `outcome.result`; category by `eventType` prefix |
 | `azure_ad_signin` | Entra ID sign-in record (diagnostic settings / Event Hub) | outcome from `status.errorCode` |

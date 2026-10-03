@@ -14,8 +14,6 @@ import shlex
 from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatchcase
 
-from .ecs.validate import flatten
-
 _REL = re.compile(r"^-(\d+)([smhdw])$")
 _UNIT = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 MAX_TERMS = 20
@@ -58,13 +56,23 @@ def parse_query(q: str | None) -> list[tuple[bool, str | None, str]]:
     return out
 
 
-def _match(flat: dict, text: str, term: tuple[bool, str | None, str]) -> bool:
+def _dig(doc: dict, path: str):
+    """Walk a dotted ECS path through the nested document (a literal dotted top-level key is tried as a fallback)."""
+    cur = doc
+    for part in path.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            return doc.get(path)
+        cur = cur[part]
+    return cur
+
+
+def _match(doc: dict, text: str, term: tuple[bool, str | None, str]) -> bool:
     neg, fld, val = term
     val_l = val.lower()
     if fld is None:
         hit = val_l in text
     else:
-        got = flat.get(fld)
+        got = _dig(doc, fld)
         vals = got if isinstance(got, list) else [got]
         hit = any(v is not None and fnmatchcase(str(v).lower(), val_l) for v in vals)
     return hit != neg
@@ -85,6 +93,7 @@ def search_logs(events, *, q: str | None = None, t_from: str | None = None, t_to
     if lo and hi and lo > hi:
         raise SearchError("`from` is after `to`")
     terms = parse_query(q)
+    need_text = any(t[1] is None for t in terms)                # build the lower-cased message text only when a bare word needs it
     snapshot = list(events)                                   # one consistent copy; the ring keeps moving
     matched, oldest, newest = [], None, None
     for doc in reversed(snapshot):                            # newest first
@@ -98,9 +107,8 @@ def search_logs(events, *, q: str | None = None, t_from: str | None = None, t_to
         if min_score is not None and float((((doc.get("logunify") or {}).get("anomaly")) or {}).get("score") or 0) < min_score:
             continue
         if terms:
-            flat = dict(flatten(doc))
-            text = f"{doc.get('message', '')}\n{(doc.get('event') or {}).get('original', '')}".lower()
-            if not all(_match(flat, text, t) for t in terms):
+            text = f"{doc.get('message', '')}\n{(doc.get('event') or {}).get('original', '')}".lower() if need_text else ""
+            if not all(_match(doc, text, t) for t in terms):
                 continue
         matched.append(doc)
     return {"total": len(matched), "offset": offset, "items": matched[offset:offset + limit],

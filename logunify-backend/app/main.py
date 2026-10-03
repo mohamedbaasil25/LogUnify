@@ -86,7 +86,7 @@ def create_app(settings: Settings = default_settings) -> FastAPI:
         hmac_key=((settings.state_hmac_key or settings.audit_hmac_key).get_secret_value().encode()
                   if (settings.state_hmac_key or settings.audit_hmac_key) else None),
     ).attach(sources=app.state.sources, ti=p_.ti, batcher=p_.batcher, ledger=p_.ledger, recent=p_.recent, anomalies=p_.anomalies,
-             intel=p_.intel)
+             intel=p_.intel, pipeline=p_)
     app.state.listeners = ListenerManager(app.state.pipeline, settings)
     for r in (health.router, metrics.router, logs.router, intel.router, integrity.router, sources.router, threatintel.router,
               alerts.router, calibration_api.router, audit_api.router, compliance_api.router, state_api.router, forwarding_api.router, dlq_api.router,
