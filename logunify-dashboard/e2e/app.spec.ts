@@ -79,6 +79,61 @@ test.describe("CERT-In alert workflow", () => {
   });
 });
 
+test.describe("analyst workflow: ownership, notes, search", () => {
+  test("take an alert, add a case note, see it under Mine", async ({ page, request }) => {
+    const id = await raiseAlert(request);
+    await signedIn(page, "analyst", { sub: "ravi" });
+    await page.goto(`/alerts?id=${encodeURIComponent(id)}`);
+    const detail = page.getByRole("region", { name: "Alert detail" });
+    await expect(detail.getByText("Nobody owns this alert yet.")).toBeVisible();
+    await detail.getByRole("button", { name: "Take it" }).click();
+    await expect(detail.getByText("Assigned to you.")).toBeVisible();
+    await expect(detail.getByRole("region", { name: "Owner" })).toContainText("Assigned to ravi");
+    await detail.getByLabel("Add a note").fill("Checked auth.log, root login from an unknown address");
+    await detail.getByRole("button", { name: "Add note" }).click();
+    await expect(detail.getByText("Checked auth.log, root login from an unknown address")).toBeVisible();
+    await page.getByRole("button", { name: "Mine" }).click();
+    await expect(page.locator("section[aria-label='Alert list']").getByRole("button", { name: id })).toBeVisible();
+    await page.getByRole("button", { name: "Unassigned" }).click();
+    await expect(page.locator("section[aria-label='Alert list']").getByRole("button", { name: id })).toHaveCount(0);
+    const notes = await (await request.get(`${API}/api/v1/alerts/${id}/notes`, { headers: auth("analyst") })).json();
+    expect(notes.items.map((n: { by: string }) => n.by)).toEqual(["ravi"]);
+  });
+
+  test("search a time range, save the search, run it again, delete it", async ({ page, request }) => {
+    const marker = `e2emarker${Date.now()}`;
+    await ingest(request, `Oct  3 10:00:00 host9 sshd[7]: Failed password for ${marker} from 198.51.100.9 port 22 ssh2`);
+    await signedIn(page, "analyst", { sub: "meena" });
+    await page.goto("/search");
+    await page.getByLabel("Query").fill(marker);
+    await page.getByLabel("Time range").selectOption("-1h");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const results = page.getByRole("region", { name: "Results" });
+    await expect(results.getByText(/1 match/)).toBeVisible();
+    await expect(results.getByTestId("coverage")).toContainText("Older history is not searchable here");
+    await page.getByLabel("Save as").fill(`find ${marker}`);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+    await page.getByLabel("Query").fill("");
+    await page.getByRole("button", { name: `Run find ${marker}` }).click();
+    await expect(results.getByText(/1 match/)).toBeVisible();
+    await expect(page.getByLabel("Query")).toHaveValue(marker);
+    await page.getByRole("button", { name: `Delete find ${marker}` }).click();
+    await expect(page.getByRole("button", { name: `Run find ${marker}` })).toHaveCount(0);
+    await page.getByLabel("Query").fill('"unterminated');
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(page.locator("p[role=alert]")).toContainText("unbalanced quote");
+  });
+
+  test("viewers cannot reach search and the API refuses them", async ({ page, request }) => {
+    expect((await request.get(`${API}/api/v1/logs/search`, { headers: auth("viewer") })).status()).toBe(403);
+    expect((await request.get(`${API}/api/v1/searches`, { headers: auth("viewer") })).status()).toBe(403);
+    await signedIn(page, "viewer");
+    await page.goto("/search");
+    await expect(page.getByLabel("Query")).toHaveCount(0);
+  });
+});
+
 test.describe("trace and operations", () => {
   test("a record is traced to the bytes received", async ({ page, request }) => {
     const doc = await ingest(request, "Oct  3 10:00:00 host1 sshd[42]: Accepted password for alice from 198.51.100.7 port 4022 ssh2");
@@ -107,7 +162,7 @@ test.describe("governance", () => {
 
 test.describe("accessibility (axe, WCAG 2 A/AA)", () => {
   const pages: [string, "viewer" | "analyst" | "admin" | null][] = [
-    ["/login", null], ["/", "analyst"], ["/alerts", "analyst"], ["/trace", "analyst"], ["/operations", "admin"], ["/governance", "admin"],
+    ["/login", null], ["/", "analyst"], ["/alerts", "analyst"], ["/search", "analyst"], ["/trace", "analyst"], ["/operations", "admin"], ["/governance", "admin"],
   ];
   for (const [path, role] of pages) {
     test(`no violations on ${path}`, async ({ page }) => {

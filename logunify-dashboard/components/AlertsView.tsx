@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useActor } from "@/lib/session";
-import type { AlertEvent, AlertStatus, AlertSummary, AlertView, CertReport } from "@/lib/types-app";
+import type { AlertEvent, AlertNote, AlertStatus, AlertSummary, AlertView, CertReport } from "@/lib/types-app";
 import { usePoll } from "@/lib/usePoll";
 import { StatusPill } from "./Badges";
 import Countdown from "./Countdown";
@@ -18,6 +18,12 @@ const FILTERS = [
   { v: "reported", l: "Reported" },
   { v: "closed", l: "Closed" },
   { v: "all", l: "All" },
+] as const;
+
+const OWNERS = [
+  { v: "", l: "Anyone" },
+  { v: "me", l: "Mine" },
+  { v: "unassigned", l: "Unassigned" },
 ] as const;
 
 const TONE: Record<AlertStatus, "crit" | "warn" | "ok" | "mute"> = { open: "crit", acknowledged: "warn", reported: "ok", closed: "mute" };
@@ -32,8 +38,11 @@ export default function AlertsView() {
   const router = useRouter();
   const params = useSearchParams();
   const selected = params.get("id");
+  const actor = useActor();
   const [filter, setFilter] = useState<string>("active");
-  const { data, error } = usePoll((s) => api.alerts(filter, s), 5000, true, 0);
+  const [owner, setOwner] = useState<string>("");
+  const assignee = owner === "me" ? actor : owner;
+  const { data, error } = usePoll((s) => api.alerts(filter, s, assignee), 5000, true, 0);
   const items = data?.items ?? [];
 
   const select = (id: string | null) => router.replace(id ? `/alerts?id=${encodeURIComponent(id)}` : "/alerts");
@@ -42,6 +51,19 @@ export default function AlertsView() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="mr-auto text-lg font-semibold">Alerts · CERT-In 6-hour workflow</h1>
+        <div role="group" aria-label="Filter by owner" className="flex flex-wrap gap-1">
+          {OWNERS.map((o) => (
+            <button
+              key={o.v}
+              onClick={() => setOwner(o.v)}
+              aria-pressed={owner === o.v}
+              disabled={o.v === "me" && !actor}
+              className={`rounded border px-3 py-1.5 text-sm disabled:opacity-40 ${owner === o.v ? "border-accent bg-accent/15 text-accent" : "border-line text-mute hover:text-fg"}`}
+            >
+              {o.l}
+            </button>
+          ))}
+        </div>
         <div role="group" aria-label="Filter by status" className="flex flex-wrap gap-1">
           {FILTERS.map((f) => (
             <button
@@ -74,13 +96,14 @@ export default function AlertsView() {
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[480px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[560px] border-collapse text-left text-sm">
                 <caption className="sr-only">Alerts, newest first. Select one to open its CERT-In workflow.</caption>
                 <thead className="bg-panel2 text-xs uppercase tracking-wider text-mute">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-medium">Alert</th>
                     <th scope="col" className="px-3 py-2 font-medium">Clock</th>
                     <th scope="col" className="px-3 py-2 font-medium">Status</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Owner</th>
                     <th scope="col" className="px-3 py-2 font-medium">Technique</th>
                     <th scope="col" className="hidden px-3 py-2 font-medium xl:table-cell">Where</th>
                   </tr>
@@ -96,6 +119,7 @@ export default function AlertsView() {
                       </td>
                       <td className="px-3 py-2"><Countdown dueAt={a.due_at} active={a.status === "open" || a.status === "acknowledged"} /></td>
                       <td className="px-3 py-2"><StatusPill tone={TONE[a.status]}>{a.status}</StatusPill></td>
+                      <td className="px-3 py-2 text-xs">{a.assignee ?? <span className="text-mute">unassigned</span>}</td>
                       <td className="px-3 py-2">
                         <span className="font-mono text-xs">{a.technique}</span> <span className="text-mute">{a.technique_name}</span>
                         <span className="ml-2 tabular text-xs text-mute">{a.score.toFixed(2)}</span>
@@ -125,15 +149,17 @@ function AlertDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const [view, setView] = useState<AlertView | null>(null);
   const [report, setReport] = useState<CertReport | null>(null);
   const [events, setEvents] = useState<AlertEvent[]>([]);
+  const [notes, setNotes] = useState<AlertNote[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [v, r, e] = await Promise.all([api.alert(id), api.alertReport(id), api.alertEvents(id)]);
+      const [v, r, e, n] = await Promise.all([api.alert(id), api.alertReport(id), api.alertEvents(id), api.alertNotes(id)]);
       setView(v);
       setReport(r);
       setEvents(e.items);
+      setNotes(n.items);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -213,6 +239,9 @@ function AlertDetail({ id, onClose }: { id: string; onClose: () => void }) {
       )}
 
       <Workflow view={view} actor={actor} act={act} />
+
+      <Assignment view={view} actor={actor} act={act} />
+      <Notes id={id} notes={notes} actor={actor} act={act} />
 
       <section aria-labelledby="gaps-title" className="space-y-2">
         <h3 id="gaps-title" className="text-sm font-semibold">CERT-In report: what is still missing</h3>
@@ -365,6 +394,70 @@ function Workflow({ view, actor, act }: { view: AlertView; actor: string; act: A
           </div>
         </form>
       )}
+    </section>
+  );
+}
+
+function Assignment({ view, actor, act }: { view: AlertView; actor: string; act: Act }) {
+  const s = view.summary;
+  const [to, setTo] = useState("");
+  const closed = s.status === "closed";
+  return (
+    <section aria-labelledby="own-title" className="space-y-2">
+      <h3 id="own-title" className="text-sm font-semibold">Owner</h3>
+      <p className="text-sm">
+        {view.assignee ? <>Assigned to <b>{view.assignee.to}</b> <span className="text-xs text-mute">by {view.assignee.by}, {fmtEpoch(view.assignee.at)}</span></> : <span className="text-mute">Nobody owns this alert yet.</span>}
+      </p>
+      {!closed && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (to.trim()) act(() => api.alertAssign(s.id, actor, to.trim()), `Assigned to ${to.trim()}.`).then(() => setTo(""));
+          }}
+        >
+          <div className="min-w-[10rem] flex-1">
+            <label htmlFor="assign-to" className={label}>Assign to (username or email)</label>
+            <input id="assign-to" value={to} onChange={(e) => setTo(e.target.value)} className={input} maxLength={100} />
+          </div>
+          <button type="submit" className={btn} disabled={!to.trim()}>Assign</button>
+          {actor && view.assignee?.to !== actor && (
+            <button type="button" className={btnPrimary} onClick={() => act(() => api.alertAssign(s.id, actor, actor), "Assigned to you.")}>Take it</button>
+          )}
+          {view.assignee && <button type="button" className={btn} onClick={() => act(() => api.alertAssign(s.id, actor, null), "Owner cleared.")}>Unassign</button>}
+        </form>
+      )}
+      <p className="text-xs text-mute">Assigning notifies your configured channels (and mails the assignee if it is an email address). It does not change the CERT-In clock.</p>
+    </section>
+  );
+}
+
+function Notes({ id, notes, actor, act }: { id: string; notes: AlertNote[]; actor: string; act: Act }) {
+  const [text, setText] = useState("");
+  return (
+    <section aria-labelledby="notes-title" className="space-y-2">
+      <h3 id="notes-title" className="text-sm font-semibold">Investigation notes ({notes.length})</h3>
+      {notes.length === 0 ? <p className="text-xs text-mute">No notes yet. Notes are permanent: they cannot be edited or deleted.</p> : (
+        <ul className="space-y-2">
+          {notes.map((n) => (
+            <li key={n.seq} className="rounded border border-line bg-bg p-2 text-sm">
+              <p className="whitespace-pre-wrap break-words">{n.text}</p>
+              <p className="mt-1 text-xs text-mute">{n.by} · {fmtEpoch(n.at)}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (text.trim()) act(() => api.alertAddNote(id, actor, text.trim()), "Note added.").then(() => setText(""));
+        }}
+      >
+        <label htmlFor="new-note" className={label}>Add a note</label>
+        <textarea id="new-note" value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={4000} className={input} />
+        <button type="submit" className={btn} disabled={!text.trim()}>Add note</button>
+      </form>
     </section>
   );
 }

@@ -187,6 +187,8 @@ class Settings(BaseSettings):
     alert_webhook_url: str = ""                    # https only (plain http for loopback); never logged beyond scheme://host
     alert_webhook_secret: SecretStr | None = None  # HMAC-SHA256 signing key for receivers
     alert_webhook_timeout_s: float = 10.0
+    alert_slack_webhook_url: SecretStr | None = None   # Slack incoming webhook (the URL is the credential: never logged beyond scheme://host)
+    alert_teams_webhook_url: SecretStr | None = None   # Teams Workflows webhook (Adaptive Card); https only
     alert_webhook_allow_http: bool = False
     alert_webhook_ca_file: str = ""
 

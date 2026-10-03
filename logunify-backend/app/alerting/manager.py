@@ -25,12 +25,13 @@ from datetime import datetime
 
 from ..integrity.merkle import hash_record
 from . import cert_in
-from .messages import Message, alert_summary, build_message, build_storm_message, build_test_message
+from .messages import (Message, alert_summary, build_assignment_message, build_message, build_storm_message,
+                       build_test_message)
 from .models import (ACTIVE, NOT_CLOSED, REPORT_CHANNELS, RESOLUTIONS, Alert, AlertNotFound, InvalidTransition)
 from .notifiers import DeliveryError, build_notifiers
 from .rules import AlertRules
 from .store import AlertStore
-from .validation import parse_minutes
+from .validation import EMAIL_RE, parse_minutes
 
 log = logging.getLogger("logunify.alerting")
 _MAX_TEXT = 2000
@@ -41,6 +42,7 @@ class Job:
     kind: str
     alert_id: str | None
     label: str = ""
+    extra: dict | None = None                          # incident.assigned: {by, to, note}
 
 
 def _label(minutes: int) -> str:
@@ -121,7 +123,7 @@ class AlertManager:
             log.info("restored %d open alert(s) from %s", len(self._alerts), self.store.path)
         if not self.notifiers:
             log.warning("alerting is enabled but NO notification channel is configured: alerts are recorded only "
-                        "(set LOGUNIFY_ALERT_WEBHOOK_URL and/or LOGUNIFY_ALERT_SMTP_HOST)")
+                        "(set LOGUNIFY_ALERT_WEBHOOK_URL, LOGUNIFY_ALERT_SLACK_WEBHOOK_URL, LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL and/or LOGUNIFY_ALERT_SMTP_HOST)")
         self._tasks = [asyncio.create_task(self._worker(), name="alert-worker"),
                        asyncio.create_task(self._maintenance_loop(), name="alert-maintenance")]
         for aid in pending:
@@ -248,6 +250,9 @@ class AlertManager:
         if job.kind == "incident.storm":
             await self._send_storm()
             return
+        if job.kind == "incident.assigned":
+            await self._send_assignment(job)
+            return
         with self._lock:
             alert = self._alerts.get(job.alert_id or "") or self.store.get(job.alert_id or "")
         if alert is None:
@@ -313,6 +318,24 @@ class AlertManager:
         if n["status"] in ("failed", "partial"):
             log.error("alert %s: notification %s (will keep retrying): %s", alert.id, n["status"],
                       {k: v.get("last_error") for k, v in n["channels"].items() if not v.get("ok")})
+
+    async def _send_assignment(self, job: Job) -> None:
+        """Tell the channels (and the assignee's mailbox, when the assignee is an email address) who owns an alert now. Best effort:
+        a failed notice is recorded but never blocks the assignment or touches the CERT-In notification state."""
+        with self._lock:
+            alert = self._alerts.get(job.alert_id or "") or self.store.get(job.alert_id or "")
+        if alert is None or not self.notifiers:
+            return
+        ex, now = job.extra or {}, self._clock()
+        to = ex.get("to", "")
+        mailbox = (to,) if EMAIL_RE.match(to) else None
+        results = []
+        for n in self.notifiers:
+            msg = build_assignment_message(alert, ex.get("by", ""), to, ex.get("note", ""), now, mailbox if n.name == "email" else None)
+            results.append((n.name, *await self._send_with_retry(n, msg)))
+        with self._lock:
+            self.store.add_event(alert.id, "assignment_notified", "system",
+                                 {"to": to, "channels": {n: {"ok": ok, "attempts": a, "error": e} for n, ok, a, e in results}}, now)
 
     async def _send_storm(self) -> None:
         with self._lock:
@@ -392,6 +415,43 @@ class AlertManager:
             self.store.save(a, ("acknowledged", by, {"note": note, "client": client}, now))
             return a
 
+    def assign(self, alert_id: str, by: str, to: str | None, note: str = "", client: str | None = None) -> Alert:
+        """Give an alert an owner (or clear it with to=None). Owners are free text (a username, or an email address to be mailed).
+        Assignment never changes the status or the CERT-In clock; it only says who is working on it."""
+        to = (to or "").strip() or None
+        if to and (len(to) > 100 or any(ord(c) < 32 for c in to)):
+            raise ValueError("assignee must be 1-100 printable characters")
+        if len((note or "")) > 1000:
+            raise ValueError("note must be at most 1000 characters")
+        with self._lock:
+            a, now = self._get(alert_id), self._clock()
+            if a.status == "closed":
+                raise InvalidTransition("alert is closed")
+            prev = (a.assignee or {}).get("to")
+            if prev == to:
+                return a
+            a.assignee = {"to": to, "by": by, "at": now} if to else None
+            self.store.save(a, ("assigned" if to else "unassigned", by, {"to": to, "from": prev, "note": note, "client": client}, now))
+        if to:
+            self._enqueue(Job("incident.assigned", alert_id, extra={"by": by, "to": to, "note": note}))
+        return a
+
+    def add_note(self, alert_id: str, by: str, text: str, client: str | None = None) -> dict:
+        """Append an investigation note. Notes live in the append-only event trail: they cannot be edited or deleted, which is
+        what makes them usable as case history. They are allowed on closed alerts (post-incident review)."""
+        text = (text or "").strip()
+        if not text or len(text) > 4000:
+            raise ValueError("a note needs 1-4000 characters")
+        with self._lock:
+            a, now = self._get(alert_id), self._clock()
+            self.store.add_event(a.id, "note", by, {"text": text, "client": client}, now)
+        return {"at": now, "by": by, "text": text}
+
+    def notes_for(self, alert_id: str) -> list[dict]:
+        self._get(alert_id)
+        return [{"seq": e["seq"], "at": e["at"], "by": e["actor"], "text": e["data"].get("text", "")}
+                for e in self.store.events(alert_id) if e["kind"] == "note"]
+
     def update_details(self, alert_id: str, by: str, details: dict, client: str | None = None) -> Alert:
         clean = _clean_details(details)
         with self._lock:
@@ -450,7 +510,8 @@ class AlertManager:
             return a
 
     # ---------------------------------------------------------------- queries
-    def list_alerts(self, status: str | None = None, limit: int = 50) -> list[dict]:
+    def list_alerts(self, status: str | None = None, limit: int = 50, assignee: str | None = None) -> list[dict]:
+        """`assignee`: a name (case-insensitive) or "unassigned". Filtering happens before the limit, so "my alerts" is complete."""
         now = self._clock()
         with self._lock:
             if status == "active":
@@ -461,6 +522,9 @@ class AlertManager:
                 items = self.store.list_alerts("closed", limit)
             else:
                 items = list(self._alerts.values()) + self.store.list_alerts("closed", limit)
+            if assignee:
+                want = assignee.strip().lower()
+                items = [a for a in items if ((a.assignee or {}).get("to") or "unassigned").lower() == want]
             items = sorted(items, key=lambda a: a.created_at, reverse=True)[:limit]
             return [alert_summary(a, now) for a in items]
 
@@ -470,7 +534,7 @@ class AlertManager:
         with self._lock:
             a, now = self._get(alert_id), self._clock()
             return copy.deepcopy({"summary": alert_summary(a, now), "trigger": a.trigger, "notification": a.notification,
-                                  "analyst": a.analyst, "ack": a.ack, "reported": a.reported, "closed": a.closed,
+                                  "analyst": a.analyst, "assignee": a.assignee, "ack": a.ack, "reported": a.reported, "closed": a.closed,
                                   "evidence": a.evidence, "last_seen_at": a.last_seen_at})
 
     def report_for(self, alert_id: str) -> dict:

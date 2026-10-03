@@ -87,6 +87,8 @@ services:
       LOGUNIFY_JWT_AUDIENCE: ${LOGUNIFY_JWT_AUDIENCE:-}
       LOGUNIFY_JWT_ROLES_CLAIM: ${LOGUNIFY_JWT_ROLES_CLAIM:-roles}
       LOGUNIFY_STATE_DB_PATH: /data/{worker}/state.db    # {worker} -> the id above: replicas never share a SQLite file
+      LOGUNIFY_ALERT_SLACK_WEBHOOK_URL: ${LOGUNIFY_ALERT_SLACK_WEBHOOK_URL:-}
+      LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL: ${LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL:-}
       LOGUNIFY_STATE_DATABASE_URL: ${LOGUNIFY_STATE_DATABASE_URL:-}   # postgresql://... : state in one shared PostgreSQL (schema per replica) instead of the file above
       LOGUNIFY_STATE_HMAC_KEY: ${LOGUNIFY_STATE_HMAC_KEY:-}           # authenticates saved Drain3/Isolation Forest blobs; without it models are not persisted
       LOGUNIFY_REDIS_URL: ${LOGUNIFY_REDIS_URL:-}                     # redis://... : LOGUNIFY_RATE_LIMIT_PER_MIN is enforced across all replicas

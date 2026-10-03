@@ -54,6 +54,15 @@ class AckBody(Actor):
     note: str = Field("", max_length=1000)
 
 
+class AssignBody(Actor):
+    to: str | None = Field(None, max_length=100, description="Assignee (username or email address); null/empty clears the owner")
+    note: str = Field("", max_length=1000)
+
+
+class NoteBody(Actor):
+    text: str = Field(min_length=1, max_length=4000)
+
+
 class ReportedBody(Actor):
     via: Literal["email", "phone", "fax", "portal", "other"] = "email"
     reference: str = Field("", max_length=200, description="CERT-In acknowledgement / ticket reference, if you have one")
@@ -124,9 +133,10 @@ async def test_channels(m: AlertManager = Depends(get_manager)):
 
 @router.get("")
 def list_alerts(status: Literal["active", "open", "acknowledged", "reported", "closed"] | None = None,
+                assignee: str | None = Query(None, max_length=100, description="a name, or `unassigned`"),
                 limit: int = Query(50, ge=1, le=500), m: AlertManager = Depends(get_manager)):
     """Newest first. `active` = open + acknowledged = the CERT-In clock is running and nothing has been reported."""
-    return {"items": m.list_alerts(status, limit)}
+    return {"items": m.list_alerts(status, limit, assignee)}
 
 
 @router.get("/{alert_id}")
@@ -154,6 +164,24 @@ def evidence(alert_id: str, m: AlertManager = Depends(get_manager)):
 def events(alert_id: str, m: AlertManager = Depends(get_manager)):
     """Append-only audit trail: creation, each notification attempt, reminders, acknowledgement, report, closure."""
     return {"items": _call(m.events_for, alert_id)}
+
+
+@router.post("/{alert_id}/assign")
+def assign(alert_id: str, body: AssignBody, request: Request, m: AlertManager = Depends(get_manager)):
+    """Set (or clear) who is investigating. The channels are told; the CERT-In clock and status are unchanged."""
+    _call(m.assign, alert_id, body.by, body.to, body.note, _client(request))
+    return m.view(alert_id)
+
+
+@router.get("/{alert_id}/notes")
+def list_notes(alert_id: str, m: AlertManager = Depends(get_manager)):
+    return {"items": _call(m.notes_for, alert_id)}
+
+
+@router.post("/{alert_id}/notes", status_code=201)
+def add_note(alert_id: str, body: NoteBody, request: Request, m: AlertManager = Depends(get_manager)):
+    """Append-only investigation note (cannot be edited or deleted; also allowed after the alert is closed)."""
+    return _call(m.add_note, alert_id, body.by, body.text, _client(request))
 
 
 @router.post("/{alert_id}/ack")

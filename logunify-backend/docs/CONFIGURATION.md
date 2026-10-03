@@ -21,6 +21,7 @@ Set them as real environment variables (systemd `EnvironmentFile`, Docker/Kubern
 | `LOGUNIFY_PII_HASH_KEY` | keyed pseudonyms when `LOGUNIFY_PII_MODE=hash` | same |
 | `LOGUNIFY_MISP_KEY` | MISP automation key | MISP UI |
 | `LOGUNIFY_ES_FORWARD_API_KEY`, `LOGUNIFY_ES_API_KEY` | Elasticsearch API keys (write-only vs. read-only monitoring) | Kibana / `POST /_security/api_key` |
+| `LOGUNIFY_ALERT_SLACK_WEBHOOK_URL`, `LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL` | chat incoming webhooks (the URL path is the credential; https only) | Slack app "Incoming Webhooks" / Teams Workflows "When a Teams webhook request is received" |
 | `LOGUNIFY_ALERT_WEBHOOK_URL` | webhook URL (often itself a secret): only `scheme://host` is ever logged | your chat/SOAR tool |
 
 ```bash

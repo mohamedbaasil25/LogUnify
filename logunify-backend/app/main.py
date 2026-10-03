@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import (alerts, audit as audit_api, auth as auth_api, compliance as compliance_api, dlq as dlq_api, forwarding as forwarding_api, health,
-                  integrity, intel, logs, metrics, parsers as parsers_api, sources, state as state_api, threatintel,
+                  integrity, intel, logs, metrics, parsers as parsers_api, searches, sources, state as state_api, threatintel,
                   stream as stream_api, system as system_api, trace as trace_api)
 from .sources import SourceRegistry
 from .config import Settings, settings as default_settings
@@ -90,7 +90,7 @@ def create_app(settings: Settings = default_settings) -> FastAPI:
     app.state.listeners = ListenerManager(app.state.pipeline, settings)
     for r in (health.router, metrics.router, logs.router, intel.router, integrity.router, sources.router, threatintel.router,
               alerts.router, audit_api.router, compliance_api.router, state_api.router, forwarding_api.router, dlq_api.router,
-              trace_api.router, parsers_api.router, stream_api.router, system_api.router, auth_api.router):
+              trace_api.router, parsers_api.router, searches.router, stream_api.router, system_api.router, auth_api.router):
         app.include_router(r)
     return app
 

@@ -1,4 +1,4 @@
-import type { AlertEvent, AlertSummary, AlertView, AuditRow, CertReport, ComplianceReport, DlqView, Me, SystemInfo, TraceResult } from "./types-app";
+import type { AlertEvent, AlertNote, AlertSummary, AlertView, LogQuery, LogSearchResult, SavedSearch, AuditRow, CertReport, ComplianceReport, DlqView, Me, SystemInfo, TraceResult } from "./types-app";
 import type { ParserInfo, AuditResult, BatchList, LogSource, Metrics, ProofBundle, RecentLogs, SourceCreate, ThroughputSeries, VerifyResult } from "./types";
 
 /** Errors carry the backend's message (FastAPI `detail`, string or validation list). */
@@ -80,7 +80,11 @@ export const api = {
   system: (signal?: AbortSignal) => request<SystemInfo>("/api/v1/system", { signal }),
 
   // ---- alerts (CERT-In workflow)
-  alerts: (status: string, signal?: AbortSignal) => request<{ items: AlertSummary[] }>(`/api/v1/alerts?status=${encodeURIComponent(status)}&limit=200`, { signal }),
+  alerts: (status: string, signal?: AbortSignal, assignee = "") =>
+    request<{ items: AlertSummary[] }>(`/api/v1/alerts?status=${encodeURIComponent(status)}&limit=200${assignee ? `&assignee=${encodeURIComponent(assignee)}` : ""}`, { signal }),
+  alertAssign: (id: string, by: string, to: string | null, note = "") => post<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}/assign`, { by, to, note }),
+  alertNotes: (id: string, signal?: AbortSignal) => request<{ items: AlertNote[] }>(`/api/v1/alerts/${encodeURIComponent(id)}/notes`, { signal }),
+  alertAddNote: (id: string, by: string, text: string) => post<AlertNote>(`/api/v1/alerts/${encodeURIComponent(id)}/notes`, { by, text }),
   alert: (id: string, signal?: AbortSignal) => request<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}`, { signal }),
   alertReport: (id: string, signal?: AbortSignal) => request<CertReport>(`/api/v1/alerts/${encodeURIComponent(id)}/cert-in-report`, { signal }),
   alertReportText: async (id: string) => {
@@ -95,6 +99,19 @@ export const api = {
   alertReported: (id: string, by: string, via: string, reference: string, note: string) =>
     post<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}/report`, { by, via, reference, note }),
   alertClose: (id: string, by: string, resolution: string, note: string) => post<AlertView>(`/api/v1/alerts/${encodeURIComponent(id)}/close`, { by, resolution, note }),
+
+  // ---- search / saved searches
+  logSearch: (q: LogQuery, limit = 100, offset = 0, signal?: AbortSignal) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v));
+    p.set("limit", String(limit));
+    p.set("offset", String(offset));
+    return request<LogSearchResult>(`/api/v1/logs/search?${p}`, { signal });
+  },
+  searches: (signal?: AbortSignal) => request<{ items: SavedSearch[] }>("/api/v1/searches", { signal }),
+  createSearch: (body: { name: string; kind: "logs" | "alerts"; query: object; shared: boolean }) => post<SavedSearch>("/api/v1/searches", body),
+  deleteSearch: (id: string) => request<void>(`/api/v1/searches/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  runSearch: (id: string) => post<{ search: SavedSearch; result: { total: number; items: unknown[]; coverage?: LogSearchResult["coverage"] } }>(`/api/v1/searches/${encodeURIComponent(id)}/run`, {}),
 
   // ---- trace
   trace: (id: string, includeRaw = false) => request<TraceResult>(`/api/v1/trace/${encodeURIComponent(id)}${includeRaw ? "?include_raw=true" : ""}`),

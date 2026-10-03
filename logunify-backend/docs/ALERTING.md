@@ -188,3 +188,34 @@ The live run also exposed two bugs that unit tests had not (a lone external addr
 - `alerts.db` is never purged (alert records and their audit trail are compliance evidence: apply your own retention policy, and set an **absolute** `LOGUNIFY_ALERT_DB_PATH` on a backed-up volume; the default is relative to the working directory). The hourly notification cap limits messages, not stored alerts.
 - The alert API uses one shared key; the rest of the LogUnify API remains unauthenticated (unchanged). Put it behind your gateway/SSO for production.
 - CERT-In FAQ Q35 says logs may be stored outside India if they can be produced to CERT-In reasonably quickly, while Directions para (iv) says "within the Indian jurisdiction"; confirm your position with counsel.
+
+
+## Analyst workflow: ownership, case notes, notifications, search
+
+**Assignment** (`POST /api/v1/alerts/{id}/assign`, body `{by, to, note}`; `to: null` clears it). The owner is free text: a username, or an email
+address. Assigning never changes the status or the CERT-In clock; it is an `assigned` / `unassigned` event in the audit trail. The configured
+channels (webhook, Slack, Teams, email) receive an `incident.assigned` message with the technique, host, score and the time left on the clock; if the
+assignee is an email address the email channel also mails that person. The notice is best effort and recorded as `assignment_notified`; a failed
+notice never blocks the assignment. Filter with `GET /api/v1/alerts?assignee=<name>|unassigned` (the dashboard's Mine / Unassigned buttons).
+
+**Case notes** (`POST` / `GET /api/v1/alerts/{id}/notes`, body `{by, text}`, 1-4000 chars). Notes are rows in the append-only event table, so they
+cannot be edited or deleted (the database refuses it) and they are allowed after the alert is closed (post-incident review). Mind what you write: a note is
+compliance evidence and is not PII-redacted.
+
+**Identity.** `by` is recorded as sent, like the other workflow calls. The dashboard sends the authenticated subject; a direct API caller can type
+any name. With `LOGUNIFY_AUTH_MODE=jwt` the call is audited under the token's real subject, so the two can be compared in the audit log.
+
+**Notifications.** Channels: signed webhook, SMTP email, **Slack** (`LOGUNIFY_ALERT_SLACK_WEBHOOK_URL`) and **Microsoft Teams**
+(`LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL`). Chat URLs are secrets (`SecretStr`), https only, and only `scheme://host` is ever logged. They get every message the
+other channels get (detected, reminders, overdue, storm, test) through the same retry / rate-limit path. Check delivery with `POST /api/v1/alerts/test`.
+*Verification status:* Slack and Teams are tested against mock HTTP transports only, never a live workspace. The Teams payload is an Adaptive Card in a
+`message` envelope (the Workflows webhook shape); legacy Office 365 connector URLs expect a different format.
+
+**Search** (`GET /api/v1/logs/search?q=&from=&to=&format=&min_score=&limit=&offset=`, analyst). Query: words match the message, `field:value` is exact
+(`*` wildcard), a leading `-` excludes, terms are AND-ed; `from`/`to` take ISO-8601 or `-15m`, `-6h`, `-7d`. **It searches only the events this instance
+still holds** (`LOGUNIFY_RECENT_BUFFER`, default 1,000, restored after a restart), not history; every response carries a `coverage` block with the window
+actually searched, and the UI repeats it. For real history use your SIEM (Elasticsearch / Splunk / Wazuh). Raise the buffer for longer windows (memory grows linearly).
+
+**Saved searches** (`/api/v1/searches`, analyst): `logs` searches (the query above) and `alerts` searches (`status`, `assignee`, where `me` means the
+caller). Private by default, or shared with all analysts; only the owner (or an admin) changes a shared one; a private search of someone else is a 404.
+Relative ranges are evaluated when the search runs. They live in the alert database (per replica, like the alerts), so they need alerting enabled.

@@ -28,9 +28,11 @@ export interface AlertSummary {
   occurrences: number;
   notification: string;
   on_time: boolean | null;
+  assignee: string | null;
 }
 export interface AlertView {
   summary: AlertSummary;
+  assignee: { to: string; by: string; at: number } | null;
   trigger: { score: number; threshold: number; technique_id: string; technique_name: string; tactic: string; basis: string; critical_match: boolean };
   notification: { status: string; cycles: number; sent_at: number | null };
   ack: { by: string; at: number; note?: string } | null;
@@ -60,6 +62,48 @@ export interface AlertEvent {
   actor: string;
   kind: string;
   data: Record<string, unknown>;
+}
+
+export interface AlertNote {
+  seq: number;
+  at: number;
+  by: string;
+  text: string;
+}
+
+// ---- search / saved searches ----------------------------------------------------------------------------------------
+export interface LogQuery {
+  q?: string;
+  from?: string;
+  to?: string;
+  format?: string;
+  min_score?: number;
+}
+export interface AlertQuery {
+  status?: string;
+  assignee?: string;
+}
+export interface SavedSearch {
+  id: string;
+  owner: string;
+  name: string;
+  kind: "logs" | "alerts";
+  shared: boolean;
+  query: LogQuery & AlertQuery;
+  created_at: number;
+  updated_at: number;
+}
+export interface SearchCoverage {
+  events_held: number;
+  oldest: string | null;
+  newest: string | null;
+  note: string;
+}
+export interface LogSearchResult {
+  total: number;
+  offset: number;
+  items: EcsDoc[];
+  coverage: SearchCoverage;
 }
 
 // ---- trace --------------------------------------------------------------------------------------------------------

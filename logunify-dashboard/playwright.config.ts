@@ -16,7 +16,8 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
   use: { baseURL: `http://127.0.0.1:${WEB}`, trace: "retain-on-failure", screenshot: "only-on-failure" },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // E2E_CHROMIUM: path to an already-installed Chromium (offline / pre-baked CI images) instead of Playwright's own download.
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], ...(process.env.E2E_CHROMIUM ? { launchOptions: { executablePath: process.env.E2E_CHROMIUM } } : {}) } }],
   webServer: [
     {
       command: `python ../logunify-backend/scripts/e2e_server.py --port ${API}`,
