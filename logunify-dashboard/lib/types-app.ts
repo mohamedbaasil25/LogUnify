@@ -29,6 +29,7 @@ export interface AlertSummary {
   notification: string;
   on_time: boolean | null;
   assignee: string | null;
+  synthetic: boolean;
 }
 export interface AlertView {
   summary: AlertSummary;
@@ -225,7 +226,7 @@ export interface Calibration {
   candidate: { threshold: number; critical_techniques: string[] };
   scope: { format: string | null; from: string | null; feedback_days: number };
   replay: {
-    coverage: { events_held: number; events_in_scope: number; buffer: number; oldest: number | null; newest: number | null; note: string };
+    coverage: { events_held: number; events_in_scope: number; synthetic_excluded: number; buffer: number; oldest: number | null; newest: number | null; note: string };
     confidence: { level: "low" | "medium" | "high"; window_hours: number; events: number; why: string };
     model_ready_events: number;
     histogram: { from: number; to: number; count: number }[];
@@ -237,6 +238,7 @@ export interface Calibration {
     note: string;
   };
   feedback: {
+    synthetic_alerts_excluded: number;
     alerts_total: number;
     closed: number;
     resolutions: Record<string, number>;
@@ -256,4 +258,5 @@ export interface CalibrationParams {
   from?: string;
   feedback_days?: string;
   capacity_per_day?: string;
+  include_synthetic?: string;
 }

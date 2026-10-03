@@ -247,3 +247,7 @@ alerts, so they survive a restart. Hit counters are in memory and reset on resta
 
 Suggested loop for a new source: send its logs for a few days (raise the buffer) > open Calibration scoped to that parser > read the funnel > preview candidates and review the
 sample rows > close real alerts with honest resolutions for a week or two > re-read feedback > change `LOGUNIFY_ALERT_*` or add reviewed suppressions.
+
+**Synthetic (test) sources.** A source whose tags include `synthetic` is a drill / test feed. Its events are labelled `labels.synthetic: "true"`, are scored and can raise alerts (so a drill exercises the real alert path),
+but they **never teach the model** (read-only template lookup, nothing added to the Isolation Forest window), are **excluded from the calibration replay and from analyst feedback** unless `include_synthetic=true`, and their
+alerts carry `synthetic: true`, a TEST badge in the dashboard and a `[TEST FEED ...]` notification subject. The CERT-In clock still runs on such an alert: close it as *not reportable* and say it was a drill.

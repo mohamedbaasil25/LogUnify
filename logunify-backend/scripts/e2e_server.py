@@ -50,8 +50,8 @@ def main() -> None:
     intel = app.state.pipeline.intel
     real = intel.analyze_many
 
-    def analyze_many(parsed_list):                       # make the trigger text-driven, deterministic
-        out = real(parsed_list)
+    def analyze_many(parsed_list, no_learn=None):        # make the trigger text-driven, deterministic
+        out = real(parsed_list, no_learn)
         for p, an in zip(parsed_list, out):
             if "audit log cleared" in (p.original or "").lower():
                 p.fields["logunify.anomaly.score"] = 0.95

@@ -79,6 +79,7 @@ def create_app(settings: Settings = default_settings) -> FastAPI:
     app.state.sources = SourceRegistry()
     app.state.pipeline = Pipeline(make_bus(settings), app.state.metrics, settings)
     p_ = app.state.pipeline
+    p_.source_lookup = app.state.sources.get
     app.state.state = StateStore(
         settings.state_db_path, settings.state_flush_interval_s, settings.state_persist_logs,
         database_url=settings.state_database_url.get_secret_value() if settings.state_database_url else "",

@@ -55,6 +55,7 @@ class Pipeline:
         self.dlq = DeadLetterFile(settings.dlq_path, settings.dlq_max_mb)
         self.archive = self._make_archive(settings)
         self.ledger = MockFabricLedger()
+        self.source_lookup = None                               # set by the app: sid -> LogSource (tags decide `synthetic` handling)
         self.alerts = AlertManager(settings, evidence_locator=self.batcher.find_leaf) if settings.alerting_enabled else None
         self.forwarder = self._make_forwarder(settings)
         self._task: asyncio.Task | None = None
@@ -149,6 +150,17 @@ class Pipeline:
         """Process one log synchronously (dry-run endpoint, tests, CLI). Returns the ECS doc, or None if it was dead-lettered."""
         return self.process_batch([Item(raw, hint, meta or IngestMeta())])[0]
 
+    def _is_synthetic(self, it: Item) -> bool:
+        """True for events from a source tagged `synthetic` (test traffic): they are labelled, kept out of model learning and out of calibration."""
+        sid = it.meta.source_id
+        if not sid or self.source_lookup is None:
+            return False
+        try:
+            src = self.source_lookup(sid)
+        except Exception:
+            return False
+        return bool(src and "synthetic" in [t.lower() for t in src.tags])
+
     def _dead(self, it: Item, reason: str, stage: str, error: str = "", after_normalize: bool = False) -> None:
         self.metrics.record_dead_lettered(reason, after_normalize)
         self.dlq.put(it.raw, reason=reason, stage=stage, event_id=it.meta.event_id, hint=it.hint, source_id=it.meta.source_id,
@@ -171,7 +183,8 @@ class Pipeline:
             except Exception as e:
                 log.exception("unexpected failure while parsing")
                 self._dead(it, "internal_error", "parse", repr(e))
-        techniques = self._enrich_many([p for _, p, _ in staged])
+        synthetic = {i: self._is_synthetic(items[i]) for i, _, _ in staged}
+        techniques = self._enrich_many([p for _, p, _ in staged], [synthetic[i] for i, _, _ in staged])
         for (i, parsed, n_red), technique in zip(staged, techniques):
             it = items[i]
             try:
@@ -179,6 +192,8 @@ class Pipeline:
                     parsed.fields.setdefault(k, v)
                 ti_hit = self._cross_reference(parsed)
                 self._stamp(parsed, it, n_red)
+                if synthetic[i]:
+                    parsed.fields["labels.synthetic"] = "true"
                 doc = to_ecs(parsed, tz=it.meta.tz or self.settings.default_timezone,
                              received=datetime.fromtimestamp(it.meta.received_at, timezone.utc))
             except Exception as e:
@@ -316,12 +331,12 @@ class Pipeline:
             self.metrics.batches_anchored += 1
         return batch.anchor
 
-    def _enrich_many(self, parsed_list: list) -> list:
+    def _enrich_many(self, parsed_list: list, no_learn: list | None = None) -> list:
         """Drain3 + Isolation Forest + MITRE for a batch. A failure here must never drop a log: fall back to per-log, then to none."""
         if not self.intel or not parsed_list:
             return [None] * len(parsed_list)
         try:
-            return [a.technique for a in self.intel.analyze_many(parsed_list)]
+            return [a.technique for a in self.intel.analyze_many(parsed_list, no_learn)]
         except Exception:
             log.exception("batch intel enrichment failed; retrying log by log")
         out = []

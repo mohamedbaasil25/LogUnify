@@ -134,8 +134,13 @@ def sweep(docs: list[dict], rules: AlertRules, dedup_s: float, thresholds=SWEEP,
     return out
 
 
-def feedback(alerts: list, now: float, top: int = 10) -> dict:
-    """What analysts decided. `alerts` are Alert objects (any status) created in the period of interest."""
+def feedback(alerts: list, now: float, top: int = 10, include_synthetic: bool = False) -> dict:
+    """What analysts decided. `alerts` are Alert objects (any status) created in the period of interest. Alerts raised by a synthetic (test) feed are
+    left out unless asked for: closing a drill alert says nothing about how often the rules are wrong on real traffic."""
+    from .messages import is_synthetic
+    n_syn = sum(1 for a in alerts if is_synthetic(a.doc))
+    if not include_synthetic:
+        alerts = [a for a in alerts if not is_synthetic(a.doc)]
     closed = [a for a in alerts if a.status == "closed" and a.closed]
     res = Counter(a.closed["resolution"] for a in closed)
     by_tech: dict[str, Counter] = defaultdict(Counter)
@@ -157,7 +162,7 @@ def feedback(alerts: list, now: float, top: int = 10) -> dict:
     reported = [a for a in alerts if a.reported]
     on_time = sum(1 for a in reported if a.reported.get("on_time"))
     active = [a for a in alerts if a.status in ("open", "acknowledged")]
-    return {"alerts_total": len(alerts), "closed": len(closed), "resolutions": dict(res),
+    return {"synthetic_alerts_excluded": 0 if include_synthetic else n_syn, "alerts_total": len(alerts), "closed": len(closed), "resolutions": dict(res),
             "false_positive_rate": round(res["false_positive"] / len(closed), 3) if closed else None,
             "techniques": techniques, "noisiest_assets": noisy,
             "cert_in": {"reported": len(reported), "on_time": on_time,

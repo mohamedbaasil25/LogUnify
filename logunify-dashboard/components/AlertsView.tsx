@@ -116,6 +116,7 @@ export default function AlertsView() {
                           {a.id}
                         </button>
                         {a.occurrences > 1 && <span className="ml-2 text-xs text-mute">×{a.occurrences}</span>}
+                        {a.synthetic && <span title="Raised by a synthetic (test) source: not a real incident" className="ml-2 rounded border border-warn/50 px-1.5 text-[11px] text-warn">TEST</span>}
                       </td>
                       <td className="px-3 py-2"><Countdown dueAt={a.due_at} active={a.status === "open" || a.status === "acknowledged"} /></td>
                       <td className="px-3 py-2"><StatusPill tone={TONE[a.status]}>{a.status}</StatusPill></td>
@@ -216,6 +217,11 @@ function AlertDetail({ id, onClose }: { id: string; onClose: () => void }) {
 
       {notice && <p role="status" className="rounded border border-ok/40 bg-ok/10 p-2 text-sm text-ok">{notice}</p>}
       {error && <p role="alert" className="rounded border border-crit/40 bg-crit/10 p-2 text-sm text-crit">{error}</p>}
+      {a.synthetic && (
+        <p role="status" className="rounded border border-warn/40 bg-warn/10 p-2 text-sm text-warn">
+          This alert came from a <b>synthetic (test) source</b>: it is a drill, not an incident. Close it as “not reportable” with that reason; do not report it to CERT-In.
+        </p>
+      )}
       {a.overdue && running && (
         <p role="alert" className="flex items-center gap-2 rounded border border-crit/50 bg-crit/10 p-2 text-sm text-crit">
           <AlertTriangle size={16} aria-hidden /> The 6-hour window has passed. Report now with whatever you have; late is still better than never.

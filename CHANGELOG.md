@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Synthetic (test) sources:** a source tagged `synthetic` is labelled, never trains Drain3 / the Isolation Forest, is excluded from calibration replay and feedback (opt-in checkbox / `include_synthetic`), and its alerts are flagged TEST. `send_windows_samples.py --http-url` for drills; `docs/WINDOWS_SECURITY.md` section 8b (one-day calibration).
 - **TLS from day one for Windows forwarders:** `make-certs.sh` (private CA, server + per-host client certificates), tested mutual-TLS stunnel configuration, `send_windows_samples.py --tls-*`, and `WINSERVER-01.md` with ready-to-run commands.
 - **Windows Security deployment pack** (`deploy/windows-security/`): audit-policy and NXLog installer scripts (dry-run by default), stunnel mutual-TLS example, env template, and `scripts/verify_windows_onboarding.py` (service / source / loss / parsed fields / time zone vs backlog / event mix / buffer horizon). Parser now sets `user.name` from the subject for 4672 / 4688 / 4697 / 7045 / 1102 / 104.
 - **Windows Security onboarding:** runbook (`docs/WINDOWS_SECURITY.md`), compose overlay, synthetic sender; parser accepts NXLog `Hostname`; event-ID MITRE rules (log cleared, privileged group add, audit policy change); parser SDK `copy` / `first_of`; **recent-events log now saved incrementally** (a 10k buffer flush went 570 ms to 15 ms) and search no longer flattens every event.

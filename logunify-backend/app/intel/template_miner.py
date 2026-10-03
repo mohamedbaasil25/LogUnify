@@ -63,6 +63,21 @@ class TemplateMinerService:
             tokens=template.split(),
         )
 
+    def peek(self, text: str) -> Mined:
+        """Like `mine`, but READ-ONLY: finds the matching template without creating one or bumping any count. Used for events that must not
+        teach the model (synthetic / test sources). An event matching no known template is reported as new (id -1) and is not remembered."""
+        content = self.preprocess(text)
+        cl = self._tm.match(content, full_search_strategy="fallback")
+        if cl is None:
+            return Mined(cluster_id=-1, template=content, is_new=True, cluster_size=0, params=[], tokens=content.split())
+        template = cl.get_template()
+        try:
+            extracted = self._tm.extract_parameters(template, content, exact_matching=True) or []
+        except Exception:
+            extracted = []
+        return Mined(cluster_id=cl.cluster_id, template=template, is_new=False, cluster_size=cl.size,
+                     params=[(p.mask_name, p.value) for p in extracted], tokens=template.split())
+
     def export_state(self) -> bytes:
         """Drain3 snapshot (jsonpickle, zlib, base64). Not thread-safe against `mine`: call it from the thread that mines."""
         slot = _Slot()

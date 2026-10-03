@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..alerting import calibration as cal
 from ..alerting.manager import AlertManager
+from ..alerting.messages import is_synthetic
 from ..alerting.models import AlertNotFound, InvalidTransition
 from ..alerting.rules import AlertRules
 from ..alerting.validation import AlertConfigError
@@ -40,6 +41,7 @@ def calibration(
     from_: str | None = Query(None, alias="from", max_length=40, description="replay window start: ISO-8601 or -6h / -7d"),
     feedback_days: int = Query(30, ge=1, le=365),
     capacity_per_day: float = Query(20, gt=0, le=10_000, description="alerts/day your analysts can triage inside the 6-hour window"),
+    include_synthetic: bool = Query(False, description="also replay events from sources tagged `synthetic` (test feeds). Off by default: they are not your traffic"),
     p: Pipeline = Depends(get_pipeline), m: AlertManager = Depends(get_manager),
     _who: Principal = Depends(guard("analyst", "alerts.calibration", sample_s=60)),
 ):
@@ -54,6 +56,9 @@ def calibration(
     except (ValueError, AlertConfigError) as e:
         raise HTTPException(422, str(e)) from None
     docs = list(p.recent)                                           # one consistent copy; the ring keeps moving
+    n_synth = sum(1 for d in docs if is_synthetic(d))
+    if not include_synthetic and n_synth:
+        docs = [d for d in docs if not is_synthetic(d)]
     if format:
         docs = [d for d in docs if (d.get("logunify") or {}).get("source_format") == format]
     if lo:
@@ -73,9 +78,9 @@ def calibration(
         "configured": {"threshold": cur.threshold, "critical_techniques": sorted(cur.critical), "require_rule_basis": cur.require_rule_basis,
                        "dedup_minutes": m.dedup_s // 60, "tagging_threshold": p.intel.threshold if p.intel else None},
         "candidate": {"threshold": cand.threshold, "critical_techniques": sorted(cand.critical)},
-        "scope": {"format": format, "from": from_, "feedback_days": feedback_days},
+        "scope": {"format": format, "from": from_, "feedback_days": feedback_days, "include_synthetic": include_synthetic},
         "replay": {
-            "coverage": {"events_held": len(p.recent), "events_in_scope": len(docs), "buffer": p.recent.maxlen,
+            "coverage": {"events_held": len(p.recent), "events_in_scope": len(docs), "synthetic_excluded": 0 if include_synthetic else n_synth, "buffer": p.recent.maxlen,
                          "oldest": min(stamps) if stamps else None, "newest": max(stamps) if stamps else None,
                          "note": "replay covers only the events this instance still holds (LOGUNIFY_RECENT_BUFFER); raise it for a longer sample"},
             "confidence": cal.confidence(len(docs), window_s),
@@ -87,7 +92,7 @@ def calibration(
                         "items": preview["alerts"][:PREVIEW_MAX], "truncated": len(preview["alerts"]) > PREVIEW_MAX},
             "note": "A replay counts alerts; it cannot say which are false positives. Review the preview rows, then close real alerts with a resolution: that is the feedback below.",
         },
-        "feedback": {**cal.feedback(alerts, now), "since_days": feedback_days, "per_day": cal.per_day(alerts)},
+        "feedback": {**cal.feedback(alerts, now, include_synthetic=include_synthetic), "since_days": feedback_days, "per_day": cal.per_day(alerts)},
         "suppressions": m.list_suppressions(),
     }
 

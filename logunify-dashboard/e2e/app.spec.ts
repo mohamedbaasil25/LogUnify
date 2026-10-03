@@ -167,6 +167,32 @@ test.describe("alert calibration", () => {
     expect(blanket.status()).toBe(422);
   });
 
+  test("a synthetic (test) source is flagged on its alert and left out of calibration unless asked for", async ({ page, request }) => {
+    const mk = await request.post(`${API}/api/v1/sources`, { headers: auth("admin"), data: { name: `drill-${Date.now()}`, type: "http", format: "auto", tags: ["synthetic"] } });
+    expect(mk.status()).toBe(201);
+    const src = await mk.json();
+    const line = `Audit log cleared by user root on drill-${Date.now()} from 203.0.113.77 token=zzz`;
+    const push = await request.post(`${API}/api/v1/sources/${src.id}/ingest`, { headers: { "X-Source-Token": src.token }, data: { logs: [line] } });
+    expect(push.status()).toBe(202);
+    let id = "";
+    for (let i = 0; i < 60 && !id; i++) {
+      const items = (await (await request.get(`${API}/api/v1/alerts?status=active&limit=200`, { headers: auth("analyst") })).json()).items;
+      id = items.find((a: { synthetic: boolean }) => a.synthetic)?.id ?? "";
+      if (!id) await new Promise((r) => setTimeout(r, 200));
+    }
+    expect(id).not.toBe("");
+    await signedIn(page, "analyst");
+    await page.goto(`/alerts?id=${encodeURIComponent(id)}`);
+    await expect(page.getByRole("region", { name: "Alert detail" }).getByText(/synthetic \(test\) source/)).toBeVisible();
+    await expect(page.locator("section[aria-label='Alert list']").getByText("TEST").first()).toBeVisible();
+    await page.goto("/calibration");
+    await expect(page.getByTestId("confidence")).toBeVisible();
+    await expect(page.getByText(/from synthetic test sources are left out/)).toBeVisible();
+    await page.getByLabel(/Include events and alerts from/).check();
+    await page.getByRole("button", { name: "Run replay" }).click();
+    await expect(page.getByText(/from synthetic test sources are left out/)).toHaveCount(0);
+  });
+
   test("analysts can read calibration but not create suppression rules; viewers are refused", async ({ page, request }) => {
     const rule = { technique: "T1070", asset: "x-*", reason: "analyst should not be able to do this", days: 7 };
     expect((await request.post(`${API}/api/v1/suppressions`, { headers: auth("analyst"), data: rule })).status()).toBe(403);

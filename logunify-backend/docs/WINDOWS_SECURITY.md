@@ -165,6 +165,34 @@ Not covered yet: account creation (4720), service install (7045, 4697), schedule
 4. Close real alerts with honest resolutions for a week. After ~20 closed alerts the false-positive rates mean something.
 5. Change `LOGUNIFY_ALERT_SCORE_THRESHOLD` (and, if needed, `LOGUNIFY_ALERT_CRITICAL_TECHNIQUES`) in configuration and restart. Add suppression rules only for causes a person has confirmed (an admin, with a reason and an expiry).
 
+## 8b. Calibrating in ONE day: what is possible and what is not
+
+A day of data is thin: the Calibration page will rate confidence **LOW** (under 24 h or 1,000 events) and the recommendation refuses to project daily volume from under an hour. A day-one result is
+a **provisional** threshold to be re-checked after about a week of real traffic, not a validated one.
+
+**Do not fill the buffer with generated events to speed it up.** Calibration measures how the model scores *your* traffic; generated traffic replaces your traffic with the generator's. Measured here
+(a synthetic feed with 5% rare events next to a real-looking feed of 3,000 events): alerts at threshold 0.70 went from **7 to 263** when the generated events were included. A threshold chosen on that would be
+wrong for the real server in either direction, and the false-positive rates from closing generated alerts mean nothing.
+
+What a day CAN legitimately give you:
+1. **A real baseline.** Let real traffic run through a normal working-day cycle (start-of-day logons, steady state, logoffs). Read the Calibration page's events-in-scope and window at the end of the day:
+   aim for 5,000+ real events across 8+ hours; if the server is quieter than that, say so in the sign-off (the threshold stays unvalidated).
+2. **A detection drill, kept separate.** Prove that a critical event really becomes an alert, a notification and a workflow, using a source **tagged `synthetic`**:
+   ```bash
+   # create an HTTP source tagged synthetic (admin token); note the id and token in the answer
+   curl -fsS -X POST "$LU_API/api/v1/sources" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' \
+     -d '{"name":"windows-drill","type":"http","format":"windows_security","timezone":"Asia/Kolkata","tags":["synthetic"]}'
+   python3 logunify-backend/scripts/send_windows_samples.py --http-url "$LU_API/api/v1/sources/<id>/ingest" --http-token "<token>" \
+     --count 3000 --rare 0.02 --realtime --rate 500
+   ```
+   Everything from a `synthetic` source is **labelled** (`labels.synthetic`), **does not teach the model** (no new templates, nothing added to the training window), is **left out of the calibration replay and feedback**
+   (tick "Include events and alerts from synthetic test sources" to see it anyway), and the alerts it raises carry a TEST badge, a `[TEST FEED ...]` notification subject and an on-screen note. They are still real alerts with a
+   running 6-hour clock: close them as *not reportable* with the reason "drill", and never report them to CERT-In.
+3. **A handful of real actions on `WinServer-01`** (a failed logon, lock / unlock) are fine: they are a few real events. Do not script them into the thousands, and **do not clear the Security log on the real server**
+   (it destroys evidence and trips the log-cleared alert and its CERT-In clock): use a lab machine for that drill.
+4. **A provisional decision.** Pick the lowest threshold in the sweep whose preview rows you would act on and whose projected volume fits your capacity; write down "provisional, review on <date + 7 days>" and what you will check
+   (alerts per day, false-positive rate once 20+ alerts are closed). The hourly notification cap (`LOGUNIFY_ALERT_MAX_NOTIFICATIONS_PER_HOUR`, default 20) limits a storm while the threshold is unproven.
+
 ## 9. Before real data: remove synthetic data
-`scripts/send_windows_samples.py` exists to smoke-test the path. Never point it at the instance you calibrate on; if you did, delete the source, stop the service, remove `state.db` (and the alert DB if
+`scripts/send_windows_samples.py` exists to smoke-test the path. Only ever send it to a source tagged `synthetic` (section 8b) or to a scratch instance; if you pointed it at an untagged source of the instance you calibrate on, delete the source, stop the service, remove `state.db` (and the alert DB if
 alerts were raised), and start clean.

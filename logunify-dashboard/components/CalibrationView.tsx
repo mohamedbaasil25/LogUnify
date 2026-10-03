@@ -24,7 +24,7 @@ const day = (s: number) => new Date(s * 1000).toLocaleDateString();
 
 export default function CalibrationView() {
   const { can } = useSession();
-  const [f, setF] = useState({ format: "", from: "", threshold: "", critical: "", capacity: "20", feedback: "30" });
+  const [f, setF] = useState({ format: "", from: "", threshold: "", critical: "", capacity: "20", feedback: "30", synthetic: false });
   const [parsers, setParsers] = useState<string[]>([]);
   const [data, setData] = useState<Calibration | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,7 +33,7 @@ export default function CalibrationView() {
   const [prefill, setPrefill] = useState<{ technique: string; asset: string } | null>(null);
 
   const params = useMemo<CalibrationParams>(
-    () => ({ format: f.format, from: f.from, threshold: f.threshold, critical: f.critical.trim(), capacity_per_day: f.capacity, feedback_days: f.feedback }),
+    () => ({ format: f.format, from: f.from, threshold: f.threshold, critical: f.critical.trim(), capacity_per_day: f.capacity, feedback_days: f.feedback, include_synthetic: f.synthetic ? "true" : "" }),
     [f],
   );
   const load = useCallback(async () => {
@@ -106,9 +106,18 @@ export default function CalibrationView() {
             {["7", "30", "90", "365"].map((d) => <option key={d} value={d}>{d} days</option>)}
           </select>
         </div>
+        <div className="sm:col-span-2 lg:col-span-4">
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" checked={f.synthetic} onChange={(e) => setF((p) => ({ ...p, synthetic: e.target.checked }))} />
+            <span>
+              Include events and alerts from <b>synthetic (test) sources</b>
+              <span className="block text-xs text-mute">Off by default. A source tagged <code>synthetic</code> is a drill / test feed: it does not teach the model and is not your traffic, so calibrating on it measures the test, not your environment.</span>
+            </span>
+          </label>
+        </div>
         <div className="flex items-end gap-2 sm:col-span-2">
           <button type="submit" className={btnPrimary} disabled={busy}>{busy ? "Replaying…" : "Run replay"}</button>
-          <button type="button" className={btn} onClick={() => setF({ format: "", from: "", threshold: "", critical: "", capacity: "20", feedback: "30" })}>Reset</button>
+          <button type="button" className={btn} onClick={() => setF({ format: "", from: "", threshold: "", critical: "", capacity: "20", feedback: "30", synthetic: false })}>Reset</button>
         </div>
       </form>
 
@@ -184,7 +193,8 @@ function Confidence({ data }: { data: Calibration }) {
         <b className="uppercase">{c.level} confidence.</b> {c.why}.
       </p>
       <p className="text-xs text-mute">
-        {cov.events_in_scope.toLocaleString()} of {cov.events_held.toLocaleString()} held events in scope (buffer {cov.buffer.toLocaleString()}). {cov.note}. Tagging threshold:{" "}
+        {cov.events_in_scope.toLocaleString()} of {cov.events_held.toLocaleString()} held events in scope (buffer {cov.buffer.toLocaleString()}).
+        {cov.synthetic_excluded > 0 && <b className="text-warn"> {cov.synthetic_excluded.toLocaleString()} event(s) from synthetic test sources are left out. </b>} {cov.note}. Tagging threshold:{" "}
         {data.configured.tagging_threshold ?? "?"}: events below it carry no technique, so thresholds under it behave like it.
       </p>
     </div>
@@ -314,6 +324,7 @@ function Feedback({ data, canTune, onSuppress }: { data: Calibration; canTune: b
             <Stat k="Reported on time" v={pct(fb.cert_in.on_time_rate)} sub={`${fb.cert_in.on_time} of ${fb.cert_in.reported} reported to CERT-In`} />
             <Stat k="Running now" v={String(fb.cert_in.active_now)} sub={fb.cert_in.overdue_now ? `${fb.cert_in.overdue_now} OVERDUE` : "none overdue"} />
           </dl>
+          {fb.synthetic_alerts_excluded > 0 && <p className="text-xs text-warn">{fb.synthetic_alerts_excluded} alert(s) raised by synthetic test sources are not counted here.</p>}
           {fb.closed < 20 && <p className="text-xs text-warn">Only {fb.closed} closed alert(s): rates this small swing wildly. Treat them as hints, not measurements.</p>}
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="overflow-x-auto">

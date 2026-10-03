@@ -27,6 +27,12 @@ def _iso(epoch: float) -> str:
     return datetime.fromtimestamp(epoch, timezone.utc).isoformat(timespec="seconds")
 
 
+def is_synthetic(doc: dict) -> bool:
+    """The triggering event came from a source tagged `synthetic` (a test / drill feed)."""
+    lab = (doc or {}).get("labels")
+    return isinstance(lab, dict) and str(lab.get("synthetic")).lower() == "true"
+
+
 def alert_summary(alert, now: float) -> dict:
     a = cert_in.affected_asset(alert.doc)
     active = alert.status in ("open", "acknowledged")
@@ -39,11 +45,14 @@ def alert_summary(alert, now: float) -> dict:
         "occurrences": alert.occurrences, "notification": alert.notification["status"],
         "on_time": (alert.reported or {}).get("on_time"),
         "assignee": (alert.assignee or {}).get("to"),
+        "synthetic": is_synthetic(alert.doc),
     }
 
 
 def build_message(kind: str, alert, report: dict, *, label: str = "", now: float) -> Message:
     subject = cert_in.subject_line(kind, report, label)
+    if is_synthetic(alert.doc):
+        subject = clean("[TEST FEED: synthetic source, not a real incident] " + subject)
     remaining = cert_in.fmt_remaining(alert.due_at - now)
     det = report["additional_information"]["detection"]
     line = f"{subject} | score {det['anomaly_score']:.2f} | time left {remaining}"

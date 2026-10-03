@@ -53,15 +53,35 @@ def event(rng: random.Random, t: datetime, rare: bool, local_tz: timezone) -> di
             "Status": "0xc000006d", "Message": "An account failed to log on."}
 
 
+def send_http(a, rng, local_tz, t0) -> int:
+    import urllib.request
+    sent, start = 0, time.perf_counter()
+    for lo in range(0, a.count, 200):
+        lines = [json.dumps(event(rng, datetime.now(timezone.utc) if a.realtime else t0 + timedelta(seconds=i), rng.random() < a.rare, local_tz), separators=(",", ":"))
+                 for i in range(lo, min(a.count, lo + 200))]
+        req = urllib.request.Request(a.http_url, data=json.dumps({"logs": lines}).encode(), method="POST",
+                                     headers={"content-type": "application/json", "X-Source-Token": a.http_token})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            if r.status != 202:
+                raise SystemExit(f"unexpected HTTP {r.status}")
+        sent += len(lines)
+        if a.rate:
+            time.sleep(max(0.0, sent / a.rate - (time.perf_counter() - start)))
+    print(f"sent {sent} events in {time.perf_counter() - start:.1f}s via HTTP")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, required=True)
+    ap.add_argument("--port", type=int, default=0, help="TCP listener port (not needed with --http-url)")
     ap.add_argument("--count", type=int, default=5000)
     ap.add_argument("--rate", type=int, default=0, help="events/second (0 = as fast as the listener accepts)")
     ap.add_argument("--rare", type=float, default=0.002, help="share of rare critical events")
     ap.add_argument("--utc-offset", type=float, default=5.5, help="hours: NXLog writes EventTime in the host's LOCAL time (default IST)")
     ap.add_argument("--realtime", action="store_true", help="stamp each event with the current time (default: spread over the last COUNT seconds, a backlog)")
+    ap.add_argument("--http-url", help="send through an HTTP source instead of TCP: https://<logunify>/api/v1/sources/<id>/ingest (use a source tagged `synthetic`)")
+    ap.add_argument("--http-token", default="", help="that source's X-Source-Token")
     ap.add_argument("--tls-ca", help="CA file: connect with TLS and verify the server against it (server name = --host, so use the name in the certificate)")
     ap.add_argument("--tls-cert", help="client certificate (mutual TLS)")
     ap.add_argument("--tls-key", help="client private key")
@@ -70,6 +90,10 @@ def main() -> int:
     rng, local_tz = random.Random(a.seed), timezone(timedelta(hours=a.utc_offset))
     t0 = datetime.now(timezone.utc) - timedelta(seconds=a.count)
     sent, start = 0, time.perf_counter()
+    if a.http_url:
+        return send_http(a, rng, local_tz, t0)
+    if not a.port:
+        ap.error("--port is required unless --http-url is given")
     raw = socket.create_connection((a.host, a.port), timeout=10)
     if a.tls_ca:
         import ssl
