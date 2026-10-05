@@ -208,7 +208,22 @@ def _ts(value: Any, fmt: str | None) -> str | None:
     return str(value)
 
 
-_TRANSFORMS = {"lower": str.lower, "upper": str.upper, "strip": str.strip}
+def _host_part(v: str) -> str:
+    """`10.0.0.5:51234` -> `10.0.0.5`, `[2001:db8::1]:443` -> `2001:db8::1`; anything else unchanged (a bare IPv6 address has several colons)."""
+    v = v.strip()
+    if v.startswith("[") and "]" in v:
+        return v[1:v.index("]")]
+    return v.rsplit(":", 1)[0] if v.count(":") == 1 else v
+
+
+def _port_part(v: str) -> str:
+    v = v.strip()
+    if v.startswith("[") and "]:" in v:
+        return v.rsplit("]:", 1)[1]
+    return v.rsplit(":", 1)[1] if v.count(":") == 1 else ""
+
+
+_TRANSFORMS = {"lower": str.lower, "upper": str.upper, "strip": str.strip, "host_part": _host_part, "port_part": _port_part}
 
 
 def _coerce(v: Any, spec: dict) -> Any:
@@ -284,8 +299,8 @@ class DeclarativeParser:
             raise ValueError("match.regex needs named groups (?P<name>...)")
         self._fields: dict[str, dict] = {k: (v if isinstance(v, dict) else {"from": v}) for k, v in (spec.get("fields") or {}).items()}
         for k, v in self._fields.items():
-            if "from" not in v and "path" not in v and "value" not in v:
-                raise ValueError(f"field {k}: needs 'from' (regex group), 'path' (json path) or 'value'")
+            if "from" not in v and "path" not in v and "value" not in v and "first_of" not in v:
+                raise ValueError(f"field {k}: needs 'from' (regex group), 'path' (json path), 'first_of' (list of json paths) or 'value'")
             if v.get("transform") and v["transform"] not in _TRANSFORMS:
                 raise ValueError(f"field {k}: unknown transform {v['transform']}")
             if v.get("from") and self._rx is not None and v["from"] not in self._rx.groupindex:
@@ -345,6 +360,9 @@ class DeclarativeParser:
             conds = [conds] if isinstance(conds, dict) else conds
             if all(_predicate(c, raw_get) for c in conds):
                 out.update(rule.get("set", {}))
+                for ecs, src in (rule.get("copy") or {}).items():          # re-point a field: {user.name: SubjectUserName} (the actor, not the target)
+                    if (v := _coerce(raw_get(src), {})) is not None:
+                        out[ecs] = v
         for k, v in self._static.items():
             out.setdefault(k, v)
         ts = self._timestamp(groups, obj)
@@ -356,6 +374,11 @@ class DeclarativeParser:
     def _value(spec: dict, groups: dict | None, obj: Any) -> Any:
         if "value" in spec:
             return spec["value"]
+        if "first_of" in spec:                                   # several possible JSON paths (different shippers name a field differently)
+            for pth in spec["first_of"]:
+                if obj is not None and (v := _dig(obj, pth)) not in (None, ""):
+                    return v
+            return None
         if "path" in spec:
             return _dig(obj, spec["path"]) if obj is not None else None
         return groups.get(spec["from"]) if groups is not None else None

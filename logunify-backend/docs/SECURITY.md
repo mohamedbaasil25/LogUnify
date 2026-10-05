@@ -2,6 +2,18 @@
 
 Four controls added on top of the pipeline. What each does, and what it does **not** do.
 
+## 0. Perimeter hardening (`app/security/hardening.py`)
+| control | behaviour |
+|---|---|
+| security headers | every reply (including 4xx/5xx): `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Cross-Origin-Resource-Policy`; `Cache-Control: no-store` on `/api/*`; HSTS when `LOGUNIFY_HSTS_ENABLED`. The dashboard adds a nonce-based **CSP** (`script-src` nonce + `strict-dynamic`, `connect-src 'self'`, `frame-ancestors 'none'`, no third-party origin) in `middleware.ts` and drops `X-Powered-By` |
+| API docs | `/docs`, `/redoc`, `/openapi.json` are **off** unless `LOGUNIFY_DOCS_ENABLED=true` |
+| public probes | `/health` = `{"status":"ok"}`, `/ready` = `{"ready":bool}`; version/config/problems only at `GET /api/v1/system` (viewer+) |
+| body size | `LOGUNIFY_MAX_BODY_BYTES` (8 MiB): 413 from `Content-Length` and while streaming; `/parse` also enforces the per-log limit |
+| brute force | alert API key and HTTP source tokens: `AUTH_FAIL_MAX` failures per window lock that **client + target** for `AUTH_LOCK_S` (429, even for the right credential until it expires; unknown source ids count too). Human JWT logins are not hard-locked (a shared proxy address would lock everyone) |
+| flood / audit bloat | optional `RATE_LIMIT_PER_MIN` per client IP; repeated 401/403 are audit-**sampled** (one row per client per 30 s, rest counted in `coalesced`) with a bounded memory table |
+| client identity | TCP peer, or the right-most `X-Forwarded-For` hop that is not a trusted proxy (`LOGUNIFY_TRUSTED_PROXIES`); the header from any other peer is ignored |
+Limits: in-memory and per process (N replicas = N counters), a speed bump not a WAF; a determined distributed attacker needs a real WAF / reverse proxy in front. The CSP allows inline *styles*.
+
 ## 1. PII redaction (`app/privacy/pii.py`)
 Runs in `Pipeline.process` right after parsing, before Drain3, scoring, threat intel, alerting, Merkle batching and the ECS topic,
 so masked values never reach the SIEM, alert evidence or a batch. Covers `event.original`, `message` and every string field.

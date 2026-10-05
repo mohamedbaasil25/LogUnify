@@ -1,0 +1,1 @@
+{"EventTime":"2026-10-01 02:03:04","Computer":"SRV-DB1.corp.example.com","Channel":"Security","EventID":1102,"SourceName":"Microsoft-Windows-Eventlog","SubjectUserName":"backdoor","Message":"The audit log was cleared."}

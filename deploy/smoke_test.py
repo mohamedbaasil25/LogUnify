@@ -86,6 +86,15 @@ if os.environ.get("LOGUNIFY_KAFKA_ENABLED", "").lower() == "true":
         return got
     ids = asyncio.run(ecs_ids())
     check("normalized documents arrived on the Kafka ECS topic", {d["event"]["id"] for d in items} <= ids)
+st, _ = call("GET", "/docs", auth=False)
+check("API docs are not exposed", st == 404)
+hreq = urllib.request.Request(B + "/api/v1/metrics", headers={"Authorization": f"Bearer {TOK}"})
+with urllib.request.urlopen(hreq, timeout=10) as r:
+    h = {k.lower(): v for k, v in r.headers.items()}
+check("security headers on API replies", h.get("x-content-type-options") == "nosniff" and h.get("x-frame-options") == "DENY" and h.get("cache-control") == "no-store")
+st, _ = call("POST", "/api/v1/parse", {"log": "a" * (200 * 1024)})
+check("oversize log refused at /parse (413)", st == 413)
+check("/health reveals nothing", call("GET", "/health", auth=False)[1] == {"status": "ok"})
 check("/ready true", call("GET", "/ready", auth=False)[1]["ready"] is True)
 print("\nALL PASS" if ok else "\nSOME FAILED")
 raise SystemExit(0 if ok else 1)

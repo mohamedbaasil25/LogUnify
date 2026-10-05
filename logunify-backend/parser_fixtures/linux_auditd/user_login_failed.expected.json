@@ -1,0 +1,20 @@
+{
+  "@timestamp": "2026-10-01T09:20:00.123000+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "user_login",
+  "event.category": [
+    "authentication"
+  ],
+  "event.dataset": "logunify.linux_auditd",
+  "event.kind": "event",
+  "event.module": "auditd",
+  "event.original": "type=USER_LOGIN msg=audit(1790846400.123:4567): pid=2210 uid=0 auid=4294967295 ses=4294967295 msg='op=login acct=\"root\" exe=\"/usr/sbin/sshd\" hostname=? addr=198.51.100.7 terminal=ssh res=failed'",
+  "event.outcome": "failure",
+  "event.type": [
+    "info"
+  ],
+  "labels.audit_serial": "4567",
+  "logunify.parser.name": "linux_auditd",
+  "logunify.source_format": "linux_auditd",
+  "message": "auditd USER_LOGIN: pid=2210 uid=0 auid=4294967295 ses=4294967295 msg='op=login acct=\"root\" exe=\"/usr/sbin/sshd\" hostname=? addr=198.51.100.7 terminal=ssh res=failed'"
+}

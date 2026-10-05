@@ -1,0 +1,25 @@
+{
+  "@timestamp": "2026-10-01T12:00:01.500000+00:00",
+  "ecs.version": "8.11.0",
+  "event.category": [
+    "database",
+    "network"
+  ],
+  "event.code": 22943,
+  "event.dataset": "logunify.mongodb_log",
+  "event.kind": "event",
+  "event.module": "mongodb",
+  "event.original": "{\"t\":{\"$date\":\"2026-10-01T12:00:01.500+00:00\"},\"s\":\"I\",\"c\":\"NETWORK\",\"id\":22943,\"ctx\":\"listener\",\"msg\":\"Connection accepted\",\"attr\":{\"remote\":\"10.0.0.7:40022\",\"connectionId\":12,\"connectionCount\":3}}",
+  "event.severity": 6,
+  "event.type": [
+    "connection"
+  ],
+  "labels.mongo_component": "NETWORK",
+  "labels.mongo_context": "listener",
+  "log.level": "info",
+  "logunify.parser.name": "mongodb_log",
+  "logunify.source_format": "mongodb_log",
+  "message": "Connection accepted",
+  "source.ip": "10.0.0.7",
+  "source.port": 40022
+}
