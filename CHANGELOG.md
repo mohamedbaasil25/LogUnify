@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Controlled demo activity:** `New-LogUnifyDemoActivity.ps1` causes a capped burst of real Windows events (failed logons for a non-existent user, harmless processes, optional benign encoded PowerShell) with a manifest; refuses on domain controllers and rapid re-runs; documented as test activity, not a baseline.
 - **Synthetic (test) sources:** a source tagged `synthetic` is labelled, never trains Drain3 / the Isolation Forest, is excluded from calibration replay and feedback (opt-in checkbox / `include_synthetic`), and its alerts are flagged TEST. `send_windows_samples.py --http-url` for drills; `docs/WINDOWS_SECURITY.md` section 8b (one-day calibration).
 - **TLS from day one for Windows forwarders:** `make-certs.sh` (private CA, server + per-host client certificates), tested mutual-TLS stunnel configuration, `send_windows_samples.py --tls-*`, and `WINSERVER-01.md` with ready-to-run commands.
 - **Windows Security deployment pack** (`deploy/windows-security/`): audit-policy and NXLog installer scripts (dry-run by default), stunnel mutual-TLS example, env template, and `scripts/verify_windows_onboarding.py` (service / source / loss / parsed fields / time zone vs backlog / event mix / buffer horizon). Parser now sets `user.name` from the subject for 4672 / 4688 / 4697 / 7045 / 1102 / 104.

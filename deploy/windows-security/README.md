@@ -10,6 +10,7 @@ Everything needed to put ONE Windows host's Security log into LogUnify. Start wi
 | `WINSERVER-01.md` | both | **ready-to-run commands for `WinServer-01` (Asia/Kolkata, TLS)**: start here |
 | `make-certs.sh` | LogUnify host | private CA + server certificate + one client certificate per Windows host (PEM; reuses the CA to add hosts) |
 | `stunnel-logunify.conf.example` | LogUnify host | mutual-TLS terminator in front of the listener (which has no TLS / auth) |
+| `New-LogUnifyDemoActivity.ps1` | Windows host (not a DC) | a SMALL, bounded burst of REAL events (failed logons for a non-existent user, harmless processes, optional benign encoded PowerShell) to demonstrate the pipeline. Dry run unless `-Apply`; writes a manifest; **controlled test activity, not a baseline** |
 | `Set-LogUnifyAuditPolicy.ps1` | Windows host | audit subcategories, command-line auditing, Security log size. **Dry run unless `-Apply`** |
 | `nxlog.conf.template` + `Install-LogUnifyForwarder.ps1` | Windows host | NXLog config (event-ID filter, JSON, disk buffer, TCP or TLS) and its installer. **Dry run unless `-Apply`** |
 | `../../logunify-backend/scripts/verify_windows_onboarding.py` | anywhere | health check of the running feed (PASS / WARN / FAIL) |
