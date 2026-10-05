@@ -208,7 +208,22 @@ def _ts(value: Any, fmt: str | None) -> str | None:
     return str(value)
 
 
-_TRANSFORMS = {"lower": str.lower, "upper": str.upper, "strip": str.strip}
+def _host_part(v: str) -> str:
+    """`10.0.0.5:51234` -> `10.0.0.5`, `[2001:db8::1]:443` -> `2001:db8::1`; anything else unchanged (a bare IPv6 address has several colons)."""
+    v = v.strip()
+    if v.startswith("[") and "]" in v:
+        return v[1:v.index("]")]
+    return v.rsplit(":", 1)[0] if v.count(":") == 1 else v
+
+
+def _port_part(v: str) -> str:
+    v = v.strip()
+    if v.startswith("[") and "]:" in v:
+        return v.rsplit("]:", 1)[1]
+    return v.rsplit(":", 1)[1] if v.count(":") == 1 else ""
+
+
+_TRANSFORMS = {"lower": str.lower, "upper": str.upper, "strip": str.strip, "host_part": _host_part, "port_part": _port_part}
 
 
 def _coerce(v: Any, spec: dict) -> Any:

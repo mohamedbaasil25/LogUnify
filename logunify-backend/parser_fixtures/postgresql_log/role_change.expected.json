@@ -1,0 +1,25 @@
+{
+  "@timestamp": "2026-10-01T12:05:10.456000+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "privilege-or-role-change",
+  "event.category": [
+    "iam",
+    "database"
+  ],
+  "event.dataset": "logunify.postgresql_log",
+  "event.kind": "event",
+  "event.module": "postgresql",
+  "event.original": "2026-10-01 12:05:10.456 UTC [1301] dba@postgres LOG:  statement: GRANT ALL PRIVILEGES ON DATABASE appdb TO newuser;",
+  "event.timezone": "UTC",
+  "event.type": [
+    "change"
+  ],
+  "labels.db_name": "postgres",
+  "labels.log_time_zone": "UTC",
+  "log.level": "log",
+  "logunify.parser.name": "postgresql_log",
+  "logunify.source_format": "postgresql_log",
+  "message": "LOG: statement: GRANT ALL PRIVILEGES ON DATABASE appdb TO newuser;",
+  "process.pid": 1301,
+  "user.name": "dba"
+}

@@ -45,6 +45,9 @@ Limits: the archive queue is bounded (overflow is counted in `dropped`, not bloc
 | `azure_ad_signin` | Entra ID sign-in record (diagnostic settings / Event Hub) | outcome from `status.errorCode` |
 | `fortinet_fortigate` | FortiGate key=value (traffic, utm, event) | keys picked in any order; timestamp is device-local |
 | `palo_alto_traffic` | PAN-OS TRAFFIC CSV, **default column order only** | custom log formats need their own parser |
+| `postgresql_log` | stderr text log, **requires** `log_line_prefix = '%m [%p] %q%u@%d '` | auth failures, connection authorized, GRANT/CREATE ROLE statements; csvlog/jsonlog not covered |
+| `mysql_error_log` | MySQL 8.0 error log default format | `Access denied` lines (need `log_error_verbosity=3`); MariaDB format not covered |
+| `mongodb_log` | MongoDB 4.4+ structured JSON log | ACCESS component auth success/failure; `attr.remote` split into source.ip/port |
 `aws_cloudtrail` already existed. **Verification status:** these were written from the vendors' documented formats and tested on hand-made
 samples, NOT on real exports from your devices. Before relying on one, run `python -m app.parsers.cli try <name> "<your line>"` on real
 logs and add them as fixtures; unmatched lines are dead-lettered, not lost. Not covered yet: PAN-OS THREAT/SYSTEM logs, Windows XML/EVTX

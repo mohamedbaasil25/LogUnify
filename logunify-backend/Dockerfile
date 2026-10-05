@@ -10,6 +10,8 @@ RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-cache-dir --require-hashes -r requirements.lock
 
 FROM ${PYTHON_IMAGE}
+# Pick up Debian security fixes published after the base image was built (the Trivy gate fails on fixable HIGH/CRITICAL OS packages).
+RUN apt-get update && apt-get -y --no-install-recommends upgrade && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin logunify \
  && mkdir -p /data && chown 10001:10001 /data
 COPY --from=build /opt/venv /opt/venv

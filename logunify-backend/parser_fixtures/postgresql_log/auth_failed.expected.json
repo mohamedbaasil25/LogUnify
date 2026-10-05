@@ -1,0 +1,28 @@
+{
+  "@timestamp": "2026-10-01T12:00:00.123000+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "authentication-failed",
+  "event.category": [
+    "authentication",
+    "database"
+  ],
+  "event.dataset": "logunify.postgresql_log",
+  "event.kind": "event",
+  "event.module": "postgresql",
+  "event.original": "2026-10-01 12:00:00.123 UTC [1234] appuser@appdb FATAL:  password authentication failed for user \"appuser\"",
+  "event.outcome": "failure",
+  "event.severity": 2,
+  "event.timezone": "UTC",
+  "event.type": [
+    "start",
+    "denied"
+  ],
+  "labels.db_name": "appdb",
+  "labels.log_time_zone": "UTC",
+  "log.level": "fatal",
+  "logunify.parser.name": "postgresql_log",
+  "logunify.source_format": "postgresql_log",
+  "message": "FATAL: password authentication failed for user \"appuser\"",
+  "process.pid": 1234,
+  "user.name": "appuser"
+}

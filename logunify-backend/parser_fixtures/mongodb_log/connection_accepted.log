@@ -1,0 +1,1 @@
+{"t":{"$date":"2026-10-01T12:00:01.500+00:00"},"s":"I","c":"NETWORK","id":22943,"ctx":"listener","msg":"Connection accepted","attr":{"remote":"10.0.0.7:40022","connectionId":12,"connectionCount":3}}
