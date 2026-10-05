@@ -99,8 +99,6 @@ services:
       LOGUNIFY_ALERT_SMTP_PASSWORD: ${LOGUNIFY_ALERT_SMTP_PASSWORD:-}
       LOGUNIFY_ALERT_EMAIL_FROM: ${LOGUNIFY_ALERT_EMAIL_FROM:-}
       LOGUNIFY_ALERT_EMAIL_TO: ${LOGUNIFY_ALERT_EMAIL_TO:-}
-      LOGUNIFY_RAW_ARCHIVE_ENABLED: ${LOGUNIFY_RAW_ARCHIVE_ENABLED:-false}
-      LOGUNIFY_RAW_ARCHIVE_KEY: ${LOGUNIFY_RAW_ARCHIVE_KEY:-}
       LOGUNIFY_STATE_DATABASE_URL: ${LOGUNIFY_STATE_DATABASE_URL:-}   # postgresql://... : state in one shared PostgreSQL (schema per replica) instead of the file above
       LOGUNIFY_STATE_HMAC_KEY: ${LOGUNIFY_STATE_HMAC_KEY:-}           # authenticates saved Drain3/Isolation Forest blobs; without it models are not persisted
       LOGUNIFY_REDIS_URL: ${LOGUNIFY_REDIS_URL:-}                     # redis://... : LOGUNIFY_RATE_LIMIT_PER_MIN is enforced across all replicas
