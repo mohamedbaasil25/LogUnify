@@ -93,6 +93,29 @@ class AnomalyScorer:
             return 0.0
         return round(0.7 * x if x <= 1 else 0.7 + 0.3 * min(x - 1, 1), 4)
 
+    # ---- persistence (feature vectors only: no pickled model is ever stored or loaded) --------------------------------
+    @property
+    def samples(self) -> int:
+        return len(self._data)
+
+    def export_window(self) -> list[list[float]]:
+        for _ in range(8):                                  # another thread (the pipeline) may append mid-copy
+            try:
+                return [list(r) for r in self._data]
+            except RuntimeError:
+                continue
+        return []
+
+    def import_window(self, rows: list[list[float]]) -> bool:
+        """Restore the training window and, if it is large enough, refit now so scoring is live right after a restart."""
+        width = len(rows[0]) if rows else 0
+        if not rows or any(len(r) != width for r in rows) or any(not all(isinstance(x, (int, float)) for x in r) for r in rows):
+            return False
+        self._data.extend(rows)
+        if len(self._data) >= self.warmup:
+            self.fit_sync()
+        return self._model is not None
+
     # ---- training -------------------------------------------------------
     def fit_async(self) -> None:
         with self._lock:

@@ -1,0 +1,35 @@
+# MySQL 8.0+ error log (default format), and MariaDB-style lines are NOT covered:
+#   2026-10-01T12:00:00.123456Z 12 [Warning] [MY-010926] [Server] Access denied for user 'root'@'10.0.0.5' (using password: YES)
+# The 'Access denied' line only appears with log_error_verbosity = 3; for connection auditing enable the general log / audit plugin and add a parser.
+# The ISO timestamp carries its own offset (Z), so the source timezone does not matter.
+name: mysql_error_log
+version: "1.0.0"
+kind: regex
+description: MySQL 8.0 error log (default format)
+priority: 15
+sniff:
+  regex: '\[MY-\d{6}\] \[[A-Za-z]+\]'
+  confidence: 0.96
+match:
+  regex: '^(?:(?=.*?Access denied for user ''(?P<du>[^'']*)''@''(?P<dh>[^'']*)''))?(?P<ts>\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:?\d\d)) (?P<thread>\d+) \[(?P<level>[A-Za-z]+)\] \[(?P<code>MY-\d+)\] \[(?P<sub>[A-Za-z_]+)\] (?P<msg>.*)$'
+timestamp:
+  field: ts
+message: "{level} {code}: {msg}"
+fields:
+  log.level:           {from: level, transform: lower}
+  event.code:          {from: code}
+  labels.mysql_thread: {from: thread}
+  labels.mysql_subsystem: {from: sub}
+  user.name:           {from: du}
+  source.ip:           {from: dh, type: ip}
+rules:
+  - when: {field: msg, regex: '^Access denied for user'}
+    set: {event.category: [authentication, database], event.type: [start, denied], event.outcome: failure, event.action: access-denied}
+  - when: {field: level, in: [Error]}
+    set: {event.type: [error]}
+static:
+  event.kind: event
+  event.category: [database]
+  event.type: [info]
+  event.module: mysql
+  event.dataset: mysql.error

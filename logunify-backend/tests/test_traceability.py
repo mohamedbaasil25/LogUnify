@@ -251,10 +251,11 @@ def test_ready_is_503_when_nothing_is_consuming_and_200_when_running(tmp_path):
     s = Settings(mock_enabled=False, alert_db_path=":memory:", dlq_path=str(tmp_path / "d.jsonl"), audit_db_path=":memory:")
     app = create_app(s)
     stopped = TestClient(app).get("/ready")                      # no lifespan started: no consumer task
-    assert stopped.status_code == 503 and "consumer loop is not running" in stopped.json()["problems"]
+    assert stopped.status_code == 503 and stopped.json() == {"ready": False}
     with TestClient(app) as c:
         r = c.get("/ready")
-        assert r.status_code == 200 and r.json()["ready"] and c.get("/health").json()["version"] == "1.0.0"
+        assert r.status_code == 200 and r.json() == {"ready": True} and c.get("/health").json() == {"status": "ok"}
+        assert c.get("/api/v1/system").json()["version"] == "1.0.0"
 
 
 def test_supervisor_restarts_the_consumer_and_logs_flow_again(tmp_path):

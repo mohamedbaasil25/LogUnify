@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     dlq_max_mb: int = 512
 
     worker_slot_dir: str = "data/.slots"   # LOGUNIFY_WORKER_ID=auto leases w0, w1, ... here (flock); mount it on the shared volume
+    docs_enabled: bool = False      # /docs, /redoc and /openapi.json: OFF by default (they map the whole attack surface)
+    max_body_bytes: int = 8 * 1024 * 1024   # HTTP request bodies above this get 413 (0 = unlimited)
+    trusted_proxies: str = ""       # CSV of CIDRs whose X-Forwarded-For is believed (your reverse proxy / the dashboard container)
+    rate_limit_per_min: int = 0     # requests per minute per client IP (0 = off); health, readiness and the SSE stream are exempt
+    auth_fail_max: int = 10         # failed machine-credential attempts (alert API key, HTTP source token) ...
+    auth_fail_window_s: float = 60  # ... within this window ...
+    auth_lock_s: float = 300        # ... lock that client+target for this long (429)
+    hsts_enabled: bool = False      # send Strict-Transport-Security (only when this API is served over TLS)
     version: str = "1.0.0"          # reported by /health (set LOGUNIFY_VERSION to the image tag)
 
     queue_max: int = 10_000       # in-memory bus capacity; overflow => dropped
@@ -105,6 +113,11 @@ class Settings(BaseSettings):
     state_enabled: bool = True
     state_db_path: str = "data/state.db"
     state_flush_interval_s: float = 5.0            # a crash loses at most this much
+    state_database_url: SecretStr | None = None   # postgresql://user:pass@host/db : shared server, one schema per replica; unset = SQLite file
+    state_persist_models: bool = True              # Drain3 templates + Isolation Forest training window (needs an HMAC key, below)
+    state_model_interval_s: float = 60.0           # at most one model snapshot per interval (it runs on the event loop)
+    state_hmac_key: SecretStr | None = None        # authenticates saved model blobs before they are loaded; falls back to AUDIT_HMAC_KEY
+    redis_url: SecretStr | None = None             # redis://host:6379/0 : request rate limit shared by all replicas (fails open to local)
     state_persist_logs: bool = True                # recent logs + anomalies (PII-redacted) also saved; false = only the rest
 
     # ---- syslog listeners (app/listeners): unset port = off. 514 needs elevated rights on Linux; there is no TLS ----------
@@ -119,6 +132,10 @@ class Settings(BaseSettings):
     # ---- access control + audit (app/security) --------------------------------------------------------------------
     auth_mode: str = "off"                         # off (dev: everyone is admin, warned at startup) | jwt (bearer HS256)
     jwt_secret: SecretStr | None = None            # >= 32 bytes; required when auth_mode=jwt
+    jwt_jwks_file: str = ""                        # RS256/ES256 verification keys from a static JWKS file (air-gapped friendly) ...
+    jwt_jwks_url: str = ""                         # ... or from the IdP's JWKS endpoint (https; http only for loopback)
+    jwt_jwks_ttl_s: float = 3600.0
+    auth_db_path: str = "data/auth.db"             # token revocations (durable)
     jwt_issuer: str = ""                           # if set, the token's iss must match
     jwt_audience: str = ""                         # if set, the token's aud must contain it
     jwt_roles_claim: str = "roles"                 # dotted path, e.g. realm_access.roles for Keycloak
@@ -170,6 +187,8 @@ class Settings(BaseSettings):
     alert_webhook_url: str = ""                    # https only (plain http for loopback); never logged beyond scheme://host
     alert_webhook_secret: SecretStr | None = None  # HMAC-SHA256 signing key for receivers
     alert_webhook_timeout_s: float = 10.0
+    alert_slack_webhook_url: SecretStr | None = None   # Slack incoming webhook (the URL is the credential: never logged beyond scheme://host)
+    alert_teams_webhook_url: SecretStr | None = None   # Teams Workflows webhook (Adaptive Card); https only
     alert_webhook_allow_http: bool = False
     alert_webhook_ca_file: str = ""
 
@@ -207,7 +226,7 @@ class Settings(BaseSettings):
             self.worker_id = _auto_worker_id(self.worker_slot_dir)
         w = self.worker_id or "0"
         for name in ("alert_db_path", "audit_db_path", "state_db_path", "dlq_path", "raw_archive_dir", "es_forward_dlq_path",
-                     "compliance_report_dir"):
+                     "compliance_report_dir", "auth_db_path"):
             setattr(self, name, getattr(self, name).replace("{worker}", w))
         return self
 

@@ -11,6 +11,7 @@ The log records the authorised ATTEMPT of an action; it does not know whether th
 Never put secrets in `detail`: it is passed through `redact()` and size-capped.
 """
 import hashlib
+from collections import OrderedDict
 import hmac
 import json
 import sqlite3
@@ -42,21 +43,27 @@ class AuditLog:
         self._lock = threading.Lock()
         self._key = hmac_key.encode() if hmac_key else None
         self.keyed = self._key is not None
-        self._last: dict[tuple, list] = {}            # (actor, action) -> [last_write_ts, suppressed_count]
+        self._last: OrderedDict[tuple, list] = OrderedDict()    # (actor, action, key) -> [last_write_ts, suppressed_count]; bounded
 
     def _digest(self, prev: str, rec: dict) -> str:
         msg = (prev + json.dumps(rec, sort_keys=True, separators=(",", ":"), ensure_ascii=False)).encode()
         return hmac.new(self._key, msg, hashlib.sha256).hexdigest() if self._key else hashlib.sha256(msg).hexdigest()
 
     def append(self, actor: str, role: str, auth: str, action: str, resource: str, outcome: str = "allowed",
-               client: str | None = None, detail: dict | None = None, sample_s: float = 0) -> int | None:
+               client: str | None = None, detail: dict | None = None, sample_s: float = 0,
+               sample_key: str | None = None) -> int | None:
         """Append one record; returns its seq. With sample_s>0, repeats of the same (actor, action) inside the window are
         counted and folded into the next record's `coalesced` field (used for polled read endpoints)."""
         now = time.time()
         detail = dict(detail or {})
         with self._lock:
-            if sample_s > 0 and outcome == "allowed":
-                st = self._last.setdefault((actor, action), [0.0, 0])
+            if sample_s > 0:                              # polled reads AND repeated denials (so failed-login floods cannot bloat the log)
+                key = (actor, action, sample_key, outcome)
+                st = self._last.get(key)
+                if st is None:
+                    st = self._last[key] = [0.0, 0]
+                    while len(self._last) > 20_000:       # an attacker rotating identities must not grow memory without bound
+                        self._last.popitem(last=False)
                 if now - st[0] < sample_s:
                     st[1] += 1
                     return None

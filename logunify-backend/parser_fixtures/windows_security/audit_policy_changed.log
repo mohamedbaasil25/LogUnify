@@ -1,0 +1,1 @@
+{"EventTime":"2026-10-01 04:20:00","Computer":"SRV-FS1.corp.example.com","Channel":"Security","EventID":4719,"SourceName":"Microsoft-Windows-Security-Auditing","SubjectUserName":"admin2","Message":"System audit policy was changed."}

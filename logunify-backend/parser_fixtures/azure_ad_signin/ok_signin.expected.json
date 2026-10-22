@@ -1,0 +1,26 @@
+{
+  "@timestamp": "2026-10-01T07:21:00+00:00",
+  "cloud.account.id": "11111111-2222-3333-4444-555555555555",
+  "cloud.provider": "azure",
+  "ecs.version": "8.11.0",
+  "event.action": "Sign-in activity",
+  "event.category": [
+    "authentication"
+  ],
+  "event.dataset": "logunify.azure_ad_signin",
+  "event.id": "abc-124",
+  "event.kind": "event",
+  "event.module": "azure",
+  "event.original": "{\"time\":\"2026-10-01T07:21:00Z\",\"tenantId\":\"11111111-2222-3333-4444-555555555555\",\"operationName\":\"Sign-in activity\",\"category\":\"SignInLogs\",\"properties\":{\"id\":\"abc-124\",\"userPrincipalName\":\"asmith@example.com\",\"ipAddress\":\"10.9.8.7\",\"appDisplayName\":\"Teams\",\"status\":{\"errorCode\":0}}}",
+  "event.outcome": "success",
+  "event.type": [
+    "start"
+  ],
+  "labels.app": "Teams",
+  "labels.error_code": 0,
+  "logunify.parser.name": "azure_ad_signin",
+  "logunify.source_format": "azure_ad_signin",
+  "message": "Sign-in activity",
+  "source.ip": "10.9.8.7",
+  "user.name": "asmith@example.com"
+}

@@ -12,12 +12,16 @@ Set them as real environment variables (systemd `EnvironmentFile`, Docker/Kubern
 |---|---|---|
 | `LOGUNIFY_JWT_SECRET` | signs/verifies bearer tokens when `LOGUNIFY_AUTH_MODE=jwt` (>= 32 bytes) | `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `LOGUNIFY_AUDIT_HMAC_KEY` | keys the audit-log hash chain | same |
+| `LOGUNIFY_STATE_DATABASE_URL` | PostgreSQL DSN for durable state (contains the DB password; only `user@host/db#schema` is ever shown by `/api/v1/state`) | your DBA / secret manager; use `sslmode=verify-full` |
+| `LOGUNIFY_STATE_HMAC_KEY` | authenticates saved Drain3 / Isolation Forest blobs before they are loaded (falls back to `AUDIT_HMAC_KEY`; without either, models are not persisted) | same as above |
+| `LOGUNIFY_REDIS_URL` | Redis for the cross-replica request-rate limit (`redis://:password@host:6379/0`) | your platform |
 | `LOGUNIFY_ALERT_API_KEY` | legacy `X-API-Key` for `/api/v1/alerts*` | same |
 | `LOGUNIFY_ALERT_WEBHOOK_SECRET` | HMAC-signs alert webhooks | same |
 | `LOGUNIFY_ALERT_SMTP_PASSWORD` | SMTP login | from your mail provider |
 | `LOGUNIFY_PII_HASH_KEY` | keyed pseudonyms when `LOGUNIFY_PII_MODE=hash` | same |
 | `LOGUNIFY_MISP_KEY` | MISP automation key | MISP UI |
 | `LOGUNIFY_ES_FORWARD_API_KEY`, `LOGUNIFY_ES_API_KEY` | Elasticsearch API keys (write-only vs. read-only monitoring) | Kibana / `POST /_security/api_key` |
+| `LOGUNIFY_ALERT_SLACK_WEBHOOK_URL`, `LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL` | chat incoming webhooks (the URL path is the credential; https only) | Slack app "Incoming Webhooks" / Teams Workflows "When a Teams webhook request is received" |
 | `LOGUNIFY_ALERT_WEBHOOK_URL` | webhook URL (often itself a secret): only `scheme://host` is ever logged | your chat/SOAR tool |
 
 ```bash

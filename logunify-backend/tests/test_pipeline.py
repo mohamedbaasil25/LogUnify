@@ -83,7 +83,7 @@ def test_parse_preview(client):
     assert r["ok"] and r["ecs"]["source"]["ip"] == "1.2.3.4"
     assert client.post("/api/v1/parse", json={"log": "{nope"}).json()["ok"] is False
     assert client.post("/api/v1/parse", json={"log": "plain text works"}).json()["ecs"]["logunify"]["source_format"] == "text"
-    assert client.get("/health").json()["bus"] == "memory"
+    assert client.get("/api/v1/system").json()["bus"] == "memory" and client.get("/health").json() == {"status": "ok"}
 
 
 def test_oversize_dropped():

@@ -24,13 +24,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ..integrity.merkle import hash_record
-from . import cert_in
-from .messages import Message, alert_summary, build_message, build_storm_message, build_test_message
+from . import calibration, cert_in
+from .messages import (Message, alert_summary, build_assignment_message, build_message, build_storm_message,
+                       build_test_message)
 from .models import (ACTIVE, NOT_CLOSED, REPORT_CHANNELS, RESOLUTIONS, Alert, AlertNotFound, InvalidTransition)
 from .notifiers import DeliveryError, build_notifiers
 from .rules import AlertRules
 from .store import AlertStore
-from .validation import parse_minutes
+from .validation import EMAIL_RE, TECHNIQUE_RE, parse_minutes
 
 log = logging.getLogger("logunify.alerting")
 _MAX_TEXT = 2000
@@ -41,6 +42,7 @@ class Job:
     kind: str
     alert_id: str | None
     label: str = ""
+    extra: dict | None = None                          # incident.assigned: {by, to, note}
 
 
 def _label(minutes: int) -> str:
@@ -108,11 +110,14 @@ class AlertManager:
         self._queue: asyncio.Queue | None = None
         self._tasks: list[asyncio.Task] = []
         self.counters: Counter = Counter()
+        self._suppressions: list[dict] = []          # active + history, newest first (small: tens of rows)
+        self._sup_hits: dict[str, dict] = {}         # id -> {hits, last_at, last_event_id}: in memory, reset by a restart
 
     # ---------------------------------------------------------------- lifecycle
     async def start(self) -> None:
         self._loop, self._queue = asyncio.get_running_loop(), asyncio.Queue()
         with self._lock:
+            self._suppressions = self.store.list_suppressions()
             for a in self.store.load(NOT_CLOSED):                 # restore: the 6-hour clocks survive a restart
                 self._alerts[a.id] = a
                 self._by_key[a.dedup_key] = a.id
@@ -121,7 +126,7 @@ class AlertManager:
             log.info("restored %d open alert(s) from %s", len(self._alerts), self.store.path)
         if not self.notifiers:
             log.warning("alerting is enabled but NO notification channel is configured: alerts are recorded only "
-                        "(set LOGUNIFY_ALERT_WEBHOOK_URL and/or LOGUNIFY_ALERT_SMTP_HOST)")
+                        "(set LOGUNIFY_ALERT_WEBHOOK_URL, LOGUNIFY_ALERT_SLACK_WEBHOOK_URL, LOGUNIFY_ALERT_TEAMS_WEBHOOK_URL and/or LOGUNIFY_ALERT_SMTP_HOST)")
         self._tasks = [asyncio.create_task(self._worker(), name="alert-worker"),
                        asyncio.create_task(self._maintenance_loop(), name="alert-maintenance")]
         for aid in pending:
@@ -155,6 +160,15 @@ class AlertManager:
         now = self._clock()
         key = hashlib.sha256(f"{trig.technique_id.split('.')[0]}|{cert_in.asset_key(doc)}".encode()).hexdigest()[:16]
         with self._lock:
+            if self._suppressions and (sup := calibration.is_suppressed(self._suppressions, trig.technique_id, doc, now)):
+                h = self._sup_hits.setdefault(sup["id"], {"hits": 0, "last_at": None, "last_event_id": None})
+                h["hits"] += 1
+                h["last_at"], h["last_event_id"] = now, (doc.get("event") or {}).get("id")
+                self.counters["suppressed_by_rule"] += 1
+                if h["hits"] in (1, 10, 100) or h["hits"] % 1000 == 0:
+                    log.info("alert suppressed by rule %s (%s on %s): %d hit(s); the event is still stored and traceable",
+                             sup["id"], trig.technique_id, sup["asset"], h["hits"])
+                return None
             current = self._alerts.get(self._by_key.get(key, ""))
             if current is not None and now - current.last_seen_at <= self.dedup_s:
                 current.occurrences += 1
@@ -248,6 +262,9 @@ class AlertManager:
         if job.kind == "incident.storm":
             await self._send_storm()
             return
+        if job.kind == "incident.assigned":
+            await self._send_assignment(job)
+            return
         with self._lock:
             alert = self._alerts.get(job.alert_id or "") or self.store.get(job.alert_id or "")
         if alert is None:
@@ -313,6 +330,24 @@ class AlertManager:
         if n["status"] in ("failed", "partial"):
             log.error("alert %s: notification %s (will keep retrying): %s", alert.id, n["status"],
                       {k: v.get("last_error") for k, v in n["channels"].items() if not v.get("ok")})
+
+    async def _send_assignment(self, job: Job) -> None:
+        """Tell the channels (and the assignee's mailbox, when the assignee is an email address) who owns an alert now. Best effort:
+        a failed notice is recorded but never blocks the assignment or touches the CERT-In notification state."""
+        with self._lock:
+            alert = self._alerts.get(job.alert_id or "") or self.store.get(job.alert_id or "")
+        if alert is None or not self.notifiers:
+            return
+        ex, now = job.extra or {}, self._clock()
+        to = ex.get("to", "")
+        mailbox = (to,) if EMAIL_RE.match(to) else None
+        results = []
+        for n in self.notifiers:
+            msg = build_assignment_message(alert, ex.get("by", ""), to, ex.get("note", ""), now, mailbox if n.name == "email" else None)
+            results.append((n.name, *await self._send_with_retry(n, msg)))
+        with self._lock:
+            self.store.add_event(alert.id, "assignment_notified", "system",
+                                 {"to": to, "channels": {n: {"ok": ok, "attempts": a, "error": e} for n, ok, a, e in results}}, now)
 
     async def _send_storm(self) -> None:
         with self._lock:
@@ -392,6 +427,43 @@ class AlertManager:
             self.store.save(a, ("acknowledged", by, {"note": note, "client": client}, now))
             return a
 
+    def assign(self, alert_id: str, by: str, to: str | None, note: str = "", client: str | None = None) -> Alert:
+        """Give an alert an owner (or clear it with to=None). Owners are free text (a username, or an email address to be mailed).
+        Assignment never changes the status or the CERT-In clock; it only says who is working on it."""
+        to = (to or "").strip() or None
+        if to and (len(to) > 100 or any(ord(c) < 32 for c in to)):
+            raise ValueError("assignee must be 1-100 printable characters")
+        if len((note or "")) > 1000:
+            raise ValueError("note must be at most 1000 characters")
+        with self._lock:
+            a, now = self._get(alert_id), self._clock()
+            if a.status == "closed":
+                raise InvalidTransition("alert is closed")
+            prev = (a.assignee or {}).get("to")
+            if prev == to:
+                return a
+            a.assignee = {"to": to, "by": by, "at": now} if to else None
+            self.store.save(a, ("assigned" if to else "unassigned", by, {"to": to, "from": prev, "note": note, "client": client}, now))
+        if to:
+            self._enqueue(Job("incident.assigned", alert_id, extra={"by": by, "to": to, "note": note}))
+        return a
+
+    def add_note(self, alert_id: str, by: str, text: str, client: str | None = None) -> dict:
+        """Append an investigation note. Notes live in the append-only event trail: they cannot be edited or deleted, which is
+        what makes them usable as case history. They are allowed on closed alerts (post-incident review)."""
+        text = (text or "").strip()
+        if not text or len(text) > 4000:
+            raise ValueError("a note needs 1-4000 characters")
+        with self._lock:
+            a, now = self._get(alert_id), self._clock()
+            self.store.add_event(a.id, "note", by, {"text": text, "client": client}, now)
+        return {"at": now, "by": by, "text": text}
+
+    def notes_for(self, alert_id: str) -> list[dict]:
+        self._get(alert_id)
+        return [{"seq": e["seq"], "at": e["at"], "by": e["actor"], "text": e["data"].get("text", "")}
+                for e in self.store.events(alert_id) if e["kind"] == "note"]
+
     def update_details(self, alert_id: str, by: str, details: dict, client: str | None = None) -> Alert:
         clean = _clean_details(details)
         with self._lock:
@@ -449,8 +521,60 @@ class AlertManager:
             self.store.save(a, ("closed", by, {"resolution": resolution, "note": note, "client": client}, now))
             return a
 
+    # ---------------------------------------------------------------- suppression rules (tuning)
+    MAX_SUPPRESSION_DAYS = 90
+
+    def add_suppression(self, by: str, technique: str, asset: str, reason: str, days: int) -> dict:
+        """Stop alerts for ONE technique on assets matching a pattern, for a limited time. This is a compliance decision, so: a reason of
+        10+ characters, an expiry (max 90 days), no blanket rules (the asset pattern must name something), and the rule is permanent
+        history (revoking keeps the row). The events themselves are still processed, stored and traceable; only the alert is skipped."""
+        technique, asset, reason = (technique or "").strip().upper(), (asset or "").strip(), (reason or "").strip()
+        if technique != "*" and not TECHNIQUE_RE.match(technique):
+            raise ValueError("technique must be a MITRE id such as T1070 or T1070.001 (or * for any)")
+        if not asset or len(asset) > 100 or any(ord(c) < 32 for c in asset):
+            raise ValueError("asset must be a host name / IP pattern of 1-100 characters (* and ? wildcards)")
+        if asset.strip("*?") == "":
+            raise ValueError("the asset pattern must name something (e.g. backup-*, 10.2.0.*): to stop alerting on a technique everywhere, "
+                             "remove it from LOGUNIFY_ALERT_CRITICAL_TECHNIQUES instead (a deliberate, reviewed config change)")
+        if len(reason) < 10:
+            raise ValueError("a suppression needs a reason of at least 10 characters (it is audited)")
+        if not 1 <= days <= self.MAX_SUPPRESSION_DAYS:
+            raise ValueError(f"days must be 1-{self.MAX_SUPPRESSION_DAYS}: suppressions expire so they are reviewed")
+        now = self._clock()
+        rec = {"id": "SUP-" + secrets.token_hex(4), "technique": technique, "asset": asset, "reason": reason, "created_by": by,
+               "created_at": now, "expires_at": now + days * 86400, "revoked_at": None, "revoked_by": None}
+        with self._lock:
+            self.store.put_suppression(rec)
+            self._suppressions.insert(0, rec)
+        log.warning("alert suppression %s created by %s: %s on %s until %s (%s)", rec["id"], by, technique, asset,
+                    datetime.fromtimestamp(rec["expires_at"], cert_in.IST).strftime("%Y-%m-%d"), reason[:80])
+        return rec
+
+    def revoke_suppression(self, sup_id: str, by: str) -> dict:
+        with self._lock:
+            rec = next((r for r in self._suppressions if r["id"] == sup_id), None)
+            if rec is None:
+                raise AlertNotFound(sup_id)
+            if rec["revoked_at"]:
+                raise InvalidTransition("suppression is already revoked")
+            rec["revoked_at"], rec["revoked_by"] = self._clock(), by
+            self.store.put_suppression(rec)
+        log.warning("alert suppression %s revoked by %s", sup_id, by)
+        return dict(rec)
+
+    def list_suppressions(self) -> list[dict]:
+        now = self._clock()
+        with self._lock:
+            return [{**r, "active": not r["revoked_at"] and r["expires_at"] > now, **self._sup_hits.get(r["id"], {"hits": 0, "last_at": None, "last_event_id": None})}
+                    for r in self._suppressions]
+
+    def active_suppressions(self) -> list[dict]:
+        with self._lock:
+            return list(self._suppressions)
+
     # ---------------------------------------------------------------- queries
-    def list_alerts(self, status: str | None = None, limit: int = 50) -> list[dict]:
+    def list_alerts(self, status: str | None = None, limit: int = 50, assignee: str | None = None) -> list[dict]:
+        """`assignee`: a name (case-insensitive) or "unassigned". Filtering happens before the limit, so "my alerts" is complete."""
         now = self._clock()
         with self._lock:
             if status == "active":
@@ -461,6 +585,9 @@ class AlertManager:
                 items = self.store.list_alerts("closed", limit)
             else:
                 items = list(self._alerts.values()) + self.store.list_alerts("closed", limit)
+            if assignee:
+                want = assignee.strip().lower()
+                items = [a for a in items if ((a.assignee or {}).get("to") or "unassigned").lower() == want]
             items = sorted(items, key=lambda a: a.created_at, reverse=True)[:limit]
             return [alert_summary(a, now) for a in items]
 
@@ -470,7 +597,7 @@ class AlertManager:
         with self._lock:
             a, now = self._get(alert_id), self._clock()
             return copy.deepcopy({"summary": alert_summary(a, now), "trigger": a.trigger, "notification": a.notification,
-                                  "analyst": a.analyst, "ack": a.ack, "reported": a.reported, "closed": a.closed,
+                                  "analyst": a.analyst, "assignee": a.assignee, "ack": a.ack, "reported": a.reported, "closed": a.closed,
                                   "evidence": a.evidence, "last_seen_at": a.last_seen_at})
 
     def report_for(self, alert_id: str) -> dict:

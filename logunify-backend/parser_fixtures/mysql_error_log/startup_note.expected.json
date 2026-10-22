@@ -1,0 +1,21 @@
+{
+  "@timestamp": "2026-10-01T11:59:00.000001+00:00",
+  "ecs.version": "8.11.0",
+  "event.category": [
+    "database"
+  ],
+  "event.code": "MY-010931",
+  "event.dataset": "logunify.mysql_error_log",
+  "event.kind": "event",
+  "event.module": "mysql",
+  "event.original": "2026-10-01T11:59:00.000001Z 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.36'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306",
+  "event.type": [
+    "info"
+  ],
+  "labels.mysql_subsystem": "Server",
+  "labels.mysql_thread": "0",
+  "log.level": "system",
+  "logunify.parser.name": "mysql_error_log",
+  "logunify.source_format": "mysql_error_log",
+  "message": "System MY-010931: /usr/sbin/mysqld: ready for connections. Version: '8.0.36'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306"
+}

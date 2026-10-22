@@ -1,0 +1,1 @@
+{"t":{"$date":"2026-10-01T12:00:00.123+00:00"},"s":"I","c":"ACCESS","id":20249,"ctx":"conn12","msg":"Authentication failed","attr":{"mechanism":"SCRAM-SHA-256","principalName":"bob","authenticationDatabase":"admin","remote":"203.0.113.9:51234","result":18}}

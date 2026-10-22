@@ -1,0 +1,41 @@
+# MongoDB 4.4+ structured log (one JSON object per line, systemLog default):
+#   {"t":{"$date":"2026-10-01T12:00:00.123+00:00"},"s":"I","c":"ACCESS","id":20436,"ctx":"conn12","msg":"Checking authorization failed", "attr":{...}}
+# Authentication events are component ACCESS. `attr.remote` is "ip:port" and is split into source.ip / source.port.
+name: mongodb_log
+version: "1.0.0"
+kind: json
+description: MongoDB 4.4+ structured JSON log
+priority: 20
+sniff:
+  keys: [t.$date, s, c, msg]
+  confidence: 0.97
+timestamp:
+  path: t.$date
+message_path: msg
+fields:
+  log.level:           {path: s, map: {F: fatal, E: error, W: warning, I: info, D1: debug, D2: debug, D3: debug, D4: debug, D5: debug}}
+  event.code:          {path: id}
+  labels.mongo_component: {path: c}
+  labels.mongo_context:   {path: ctx}
+  user.name:           {path: attr.principalName}
+  labels.auth_db:      {path: attr.authenticationDatabase}
+  labels.auth_mechanism: {path: attr.mechanism}
+  source.ip:           {path: attr.remote, transform: host_part, type: ip}
+  source.port:         {path: attr.remote, transform: port_part, type: int}
+rules:
+  - when: {field: c, equals: ACCESS}
+    set: {event.category: [authentication, database]}
+  - when: [{field: c, equals: ACCESS}, {field: msg, regex: '(?i)authentication failed|unauthorized'}]
+    set: {event.type: [start, denied], event.outcome: failure, event.action: authentication-failed}
+  - when: [{field: c, equals: ACCESS}, {field: msg, regex: '(?i)successfully authenticated'}]
+    set: {event.type: [start, allowed], event.outcome: success, event.action: authentication-succeeded}
+  - when: {field: msg, regex: '^(?:Connection accepted|Connection ended)'}
+    set: {event.category: [database, network], event.type: [connection]}
+  - when: {field: s, in: [F, E]}
+    set: {event.type: [error]}
+static:
+  event.kind: event
+  event.category: [database]
+  event.type: [info]
+  event.module: mongodb
+  event.dataset: mongodb.log

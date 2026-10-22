@@ -1,0 +1,28 @@
+{
+  "@timestamp": "2026-10-01T12:00:00.123456+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "access-denied",
+  "event.category": [
+    "authentication",
+    "database"
+  ],
+  "event.code": "MY-010926",
+  "event.dataset": "logunify.mysql_error_log",
+  "event.kind": "event",
+  "event.module": "mysql",
+  "event.original": "2026-10-01T12:00:00.123456Z 12 [Warning] [MY-010926] [Server] Access denied for user 'root'@'203.0.113.9' (using password: YES)",
+  "event.outcome": "failure",
+  "event.severity": 4,
+  "event.type": [
+    "start",
+    "denied"
+  ],
+  "labels.mysql_subsystem": "Server",
+  "labels.mysql_thread": "12",
+  "log.level": "warning",
+  "logunify.parser.name": "mysql_error_log",
+  "logunify.source_format": "mysql_error_log",
+  "message": "Warning MY-010926: Access denied for user 'root'@'203.0.113.9' (using password: YES)",
+  "source.ip": "203.0.113.9",
+  "user.name": "root"
+}

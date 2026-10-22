@@ -38,6 +38,7 @@ class Alert:
     ack: dict | None = None
     reported: dict | None = None
     closed: dict | None = None
+    assignee: dict | None = None                          # {to, by, at}: who owns the investigation (not a CERT-In field)
     notification: dict = field(default_factory=new_notification)
     reminders_sent: list = field(default_factory=list)    # reminder thresholds (minutes before due) already sent
     overdue_last_at: float | None = None

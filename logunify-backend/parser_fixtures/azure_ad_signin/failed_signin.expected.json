@@ -1,0 +1,33 @@
+{
+  "@timestamp": "2026-10-01T07:20:11.500000+00:00",
+  "cloud.account.id": "11111111-2222-3333-4444-555555555555",
+  "cloud.provider": "azure",
+  "ecs.version": "8.11.0",
+  "event.action": "Sign-in activity",
+  "event.category": [
+    "authentication"
+  ],
+  "event.dataset": "logunify.azure_ad_signin",
+  "event.id": "abc-123",
+  "event.kind": "event",
+  "event.module": "azure",
+  "event.original": "{\"time\":\"2026-10-01T07:20:11.5Z\",\"tenantId\":\"11111111-2222-3333-4444-555555555555\",\"operationName\":\"Sign-in activity\",\"category\":\"SignInLogs\",\"properties\":{\"id\":\"abc-123\",\"userPrincipalName\":\"cfo@example.com\",\"userId\":\"u-9\",\"ipAddress\":\"203.0.113.77\",\"appDisplayName\":\"Office 365\",\"clientAppUsed\":\"Browser\",\"conditionalAccessStatus\":\"failure\",\"riskLevelDuringSignIn\":\"high\",\"location\":{\"city\":\"Moscow\",\"countryOrRegion\":\"RU\"},\"status\":{\"errorCode\":50126,\"failureReason\":\"Invalid username or password\"}}}",
+  "event.outcome": "failure",
+  "event.reason": "Invalid username or password",
+  "event.type": [
+    "start"
+  ],
+  "labels.app": "Office 365",
+  "labels.client_app": "Browser",
+  "labels.conditional_access": "failure",
+  "labels.error_code": 50126,
+  "labels.risk_level": "high",
+  "logunify.parser.name": "azure_ad_signin",
+  "logunify.source_format": "azure_ad_signin",
+  "message": "Sign-in activity",
+  "source.geo.city_name": "Moscow",
+  "source.geo.country_iso_code": "RU",
+  "source.ip": "203.0.113.77",
+  "user.id": "u-9",
+  "user.name": "cfo@example.com"
+}

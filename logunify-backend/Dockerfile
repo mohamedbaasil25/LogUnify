@@ -10,13 +10,15 @@ RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-cache-dir --require-hashes -r requirements.lock
 
 FROM ${PYTHON_IMAGE}
+# Pick up Debian security fixes published after the base image was built (the Trivy gate fails on fixable HIGH/CRITICAL OS packages).
+RUN apt-get update && apt-get -y --no-install-recommends upgrade && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin logunify \
  && mkdir -p /data && chown 10001:10001 /data
 COPY --from=build /opt/venv /opt/venv
 # FORWARDER_ROOT: retention policy files, mounted read-only by compose (used by the compliance retention proof)
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 LOGUNIFY_AUTH_MODE=jwt \
-    LOGUNIFY_ALERT_DB_PATH=/data/alerts.db LOGUNIFY_AUDIT_DB_PATH=/data/audit.db LOGUNIFY_STATE_DB_PATH=/data/state.db \
+    LOGUNIFY_AUTH_DB_PATH=/data/auth.db LOGUNIFY_ALERT_DB_PATH=/data/alerts.db LOGUNIFY_AUDIT_DB_PATH=/data/audit.db LOGUNIFY_STATE_DB_PATH=/data/state.db \
     LOGUNIFY_DLQ_PATH=/data/dlq.jsonl LOGUNIFY_RAW_ARCHIVE_DIR=/data/raw LOGUNIFY_COMPLIANCE_REPORT_DIR=/data/compliance \
     LOGUNIFY_ES_FORWARD_DLQ_PATH=/data/es-dlq.jsonl LOGUNIFY_FORWARDER_ROOT=/opt/forwarder
 WORKDIR /app

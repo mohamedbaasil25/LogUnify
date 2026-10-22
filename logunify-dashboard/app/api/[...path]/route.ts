@@ -19,6 +19,9 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   req.headers.forEach((v, k) => {
     if (!HOP.has(k.toLowerCase())) headers.set(k, v);
   });
+  // keep the address chain an upstream reverse proxy gave us; the backend believes it only from its trusted-proxy list
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) headers.set("x-forwarded-for", xff);
   const init: RequestInit & { duplex?: "half" } = { method: req.method, headers, signal: req.signal, redirect: "manual", cache: "no-store" };
   if (req.method !== "GET" && req.method !== "HEAD") {
     init.body = req.body;

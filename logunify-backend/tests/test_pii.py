@@ -97,3 +97,53 @@ def test_failure_fails_closed_but_keeps_log():
     doc = p.process(json.dumps({"message": f"card {VISA}"}).encode(), "json")
     assert doc is not None and VISA not in json.dumps(doc)
     assert p.metrics.pii_failures == 1
+
+
+def _luhn_complete(prefix: str, length: int = 16) -> str:
+    body = prefix + "0" * (length - 1 - len(prefix))
+    for c in "0123456789":
+        if luhn(body + c):
+            return body + c
+    raise AssertionError
+
+
+@pytest.mark.parametrize("prefix", ["4", "51", "55", "2221", "2720", "34", "37", "36", "38", "35", "60", "65", "300", "305", "644", "649", "508"])
+def test_issuer_ranges_are_redacted(prefix):
+    n = _luhn_complete(prefix)
+    out, found = PiiRedactor().redact(f"pan {n} end")
+    assert found["card"] == 1 and n not in out
+
+
+@pytest.mark.parametrize("prefix", ["50", "56", "2220", "2721", "33", "39", "306", "643", "66", "507", "10", "99"])
+def test_luhn_valid_non_issuer_numbers_are_left_alone(prefix):
+    n = _luhn_complete(prefix)
+    assert luhn(n)
+    out, found = PiiRedactor().redact(f"order {n} end")
+    assert found["card"] == 0 and n in out
+
+
+@pytest.mark.parametrize("length,expected", [(12, 0), (13, 1), (16, 1), (19, 1), (20, 0)])
+def test_card_length_bounds(length, expected):
+    n = _luhn_complete("4", length)
+    _, found = PiiRedactor().redact(f"x {n} y")
+    assert found["card"] == expected
+
+
+def test_verhoeff_known_vectors_and_every_table_row_is_exercised():
+    assert verhoeff("2363") and not verhoeff("2364")           # classic Verhoeff test vectors: check digit 3 for payload 236
+    assert verhoeff_check_digit("236") == "3"
+    for body in ("1", "12", "123", "1234", "12345", "123456", "1234567", "12345678", "123456789", "1234567890", "98765432109876543210"):
+        assert verhoeff(body + verhoeff_check_digit(body))     # round-trip across all 8 permutation rows and both table axes
+        wrong = body + str((int(verhoeff_check_digit(body)) + 1) % 10)
+        assert not verhoeff(wrong)
+
+
+def test_hash_mode_is_stable_per_value_and_distinct_across_values():
+    r = PiiRedactor(mode="hash", key="k" * 32)
+    a1, _ = r.redact("mail a@example.com")
+    a2, _ = r.redact("MAIL A@example.com")
+    b, _ = r.redact("mail b@example.com")
+    assert a1.split()[-1] == a2.split()[-1] != b.split()[-1]
+    assert a1.split()[-1].startswith("[PII:email:")
+    masked, _ = PiiRedactor(mode="mask").redact("mail a@example.com")
+    assert masked.endswith("[PII:email]")

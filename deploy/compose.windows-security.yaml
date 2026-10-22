@@ -1,0 +1,14 @@
+# Overlay for onboarding the Windows Security log (docs: logunify-backend/docs/WINDOWS_SECURITY.md).
+#   LOGUNIFY_WINDOWS_LISTEN=10.0.5.20 docker compose -f compose.yaml -f deploy/compose.windows-security.yaml up -d
+# The listener has NO TLS or authentication: publish it only on a private address (never 0.0.0.0 on an internet-facing host) and put a TLS terminator in front.
+# Create the source afterwards (admin API): type=syslog, protocol=tcp, port=5514, format=windows_security, timezone=<host zone>.
+services:
+  backend:
+    ports:
+      - "${LOGUNIFY_WINDOWS_LISTEN:?set LOGUNIFY_WINDOWS_LISTEN to the private address to publish on}:5514:5514"
+    environment:
+      LOGUNIFY_SYSLOG_BIND: 0.0.0.0                       # inside the container; the published address above is what limits exposure
+      LOGUNIFY_SYSLOG_MAX_MESSAGE_BYTES: ${LOGUNIFY_SYSLOG_MAX_MESSAGE_BYTES:-32768}
+      LOGUNIFY_RECENT_BUFFER: ${LOGUNIFY_RECENT_BUFFER:-50000}
+      LOGUNIFY_STATE_HMAC_KEY: ${LOGUNIFY_STATE_HMAC_KEY:-}
+    mem_limit: ${LOGUNIFY_BACKEND_MEM:-2g}

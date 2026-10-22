@@ -1,0 +1,37 @@
+{
+  "@timestamp": "2026-10-01T12:05:00+00:00",
+  "destination.ip": "10.0.0.9",
+  "destination.port": 22,
+  "ecs.version": "8.11.0",
+  "event.action": "deny",
+  "event.category": [
+    "network"
+  ],
+  "event.dataset": "logunify.palo_alto_traffic",
+  "event.kind": "event",
+  "event.module": "panos",
+  "event.original": "1,2026/10/01 12:05:00,0123456789,TRAFFIC,drop,2562,2026/10/01 12:05:00,203.0.113.8,10.0.0.9,0.0.0.0,0.0.0.0,block-inbound,,,ssh,vsys1,untrust,dmz,ethernet1/2,ethernet1/3,fwd-all,2026/10/01 12:05:00,777,1,40001,22,0,0,0x0,tcp,deny,60,60,0,1,2026/10/01 12:05:00,0,any,0",
+  "event.outcome": "failure",
+  "event.timezone": "UTC",
+  "event.type": [
+    "connection",
+    "denied"
+  ],
+  "labels.pan_session_id": "777",
+  "labels.pan_subtype": "drop",
+  "logunify.parser.name": "palo_alto_traffic",
+  "logunify.source_format": "palo_alto_traffic",
+  "message": "ssh deny 203.0.113.8 -> 10.0.0.9 (rule block-inbound)",
+  "network.application": "ssh",
+  "network.transport": "tcp",
+  "observer.egress.interface.name": "ethernet1/3",
+  "observer.egress.zone": "dmz",
+  "observer.ingress.interface.name": "ethernet1/2",
+  "observer.ingress.zone": "untrust",
+  "observer.serial_number": "0123456789",
+  "observer.type": "firewall",
+  "observer.vendor": "Palo Alto Networks",
+  "rule.name": "block-inbound",
+  "source.ip": "203.0.113.8",
+  "source.port": 40001
+}

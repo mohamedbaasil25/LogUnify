@@ -1,0 +1,21 @@
+{
+  "@timestamp": "2026-10-01T12:10:00.001000+00:00",
+  "ecs.version": "8.11.0",
+  "event.category": [
+    "database"
+  ],
+  "event.dataset": "logunify.postgresql_log",
+  "event.kind": "event",
+  "event.module": "postgresql",
+  "event.original": "2026-10-01 12:10:00.001 UTC [88] LOG:  checkpoint starting: time",
+  "event.timezone": "UTC",
+  "event.type": [
+    "info"
+  ],
+  "labels.log_time_zone": "UTC",
+  "log.level": "log",
+  "logunify.parser.name": "postgresql_log",
+  "logunify.source_format": "postgresql_log",
+  "message": "LOG: checkpoint starting: time",
+  "process.pid": 88
+}

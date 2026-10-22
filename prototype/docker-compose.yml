@@ -1,0 +1,34 @@
+services:
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 10}
+
+  webhook-mock:                                  # MOCK Teams/Slack endpoint; replace LOGUNIFY_WEBHOOK_URL with a real one in .env
+    build: .
+    command: ["python", "mock_webhook.py"]
+    healthcheck: {test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/_count')"], interval: 5s, timeout: 3s, retries: 10}
+
+  logunify:
+    build: .
+    depends_on:
+      redis: {condition: service_healthy}
+      webhook-mock: {condition: service_healthy}
+    environment:
+      LOGUNIFY_LISTEN_HOST: 0.0.0.0              # inside the container; published to the host's loopback only (below)
+      LOGUNIFY_LISTEN_PORT: "5514"
+      LOGUNIFY_ALERT_SCORE_THRESHOLD: ${LOGUNIFY_ALERT_SCORE_THRESHOLD:-0.80}
+      LOGUNIFY_CRITICAL_TECHNIQUES: ${LOGUNIFY_CRITICAL_TECHNIQUES:-T1059,T1059.001,T1003,T1136,T1070}
+      LOGUNIFY_WEBHOOK_URL: ${LOGUNIFY_WEBHOOK_URL:-http://webhook-mock:8080/services/MOCK}
+      LOGUNIFY_REDIS_URL: redis://redis:6379/0
+      LOGUNIFY_SOURCE_TZ: ${LOGUNIFY_SOURCE_TZ:-UTC}
+    ports: ["127.0.0.1:5514:5514"]               # put the mutual-TLS stunnel (6514) in front of this
+    volumes: ["logunify-data:/data"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+volumes:
+  logunify-data:

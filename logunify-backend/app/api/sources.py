@@ -122,11 +122,17 @@ async def delete_source(sid: str, request: Request, reg: SourceRegistry = Depend
 async def ingest(sid: str, body: IngestBody, request: Request, x_source_token: str = Header(""),
                  reg: SourceRegistry = Depends(get_registry), p: Pipeline = Depends(get_pipeline)):
     """Push logs into the pipeline through an HTTP feed. Auth: `X-Source-Token` header."""
+    h = request.app.state.hardening
+    lk = ("src", h.client_ip(request), sid)
+    if (left := h.keys.locked(lk)):
+        raise HTTPException(429, "Too many failed attempts", headers={"Retry-After": str(int(left) + 1)})
     src = reg.get(sid)
     if src is None or src.type != "http" or not src.check_token(x_source_token):
+        h.keys.fail(lk)
         raise HTTPException(401, "invalid source or token")     # same answer for unknown id / bad token
+    h.keys.success(lk)
     hint = None if src.format == "auto" else src.format
     accepted = await p.submit_many([line.encode() for line in body.logs], hint, source_id=src.id, transport="http",
-                                   tz=src.config.get("timezone"), peer=request.client.host if request.client else None)
+                                   tz=src.config.get("timezone"), peer=h.client_ip(request))
     src.received += accepted
     return {"submitted": len(body.logs), "accepted": accepted}

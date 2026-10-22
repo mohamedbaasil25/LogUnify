@@ -31,20 +31,38 @@ class LogIntelligence:
         self.scorer = AnomalyScorer(warmup=warmup, refit_every=refit_every, window=window)
         self.anomalies = 0
 
+    def export_state(self) -> dict[str, str]:
+        """Learned state as text blobs: Drain3 templates (snapshot) and the Isolation Forest training window (JSON)."""
+        import json
+        return {"drain3": self.miner.export_state().decode("ascii"),
+                "iforest_window": json.dumps(self.scorer.export_window(), separators=(",", ":"))}
+
+    def import_state(self, blobs: dict[str, str]) -> dict:
+        """Restore what `export_state` saved. The caller MUST have authenticated the blobs (Drain3's format is jsonpickle)."""
+        import json
+        out = {}
+        if "drain3" in blobs:
+            out["templates"] = self.miner.import_state(blobs["drain3"].encode("ascii"))
+        if "iforest_window" in blobs:
+            out["iforest_samples"] = len(rows := json.loads(blobs["iforest_window"]))
+            out["model_ready"] = self.scorer.import_window(rows)
+        return out
+
     def analyze(self, parsed: ParsedLog) -> Analysis:
         """Enrich `parsed.fields` in place (setdefault only) and return the analysis."""
         return self.analyze_many([parsed])[0]
 
-    def analyze_many(self, parsed_list: list[ParsedLog]) -> list[Analysis]:
+    def analyze_many(self, parsed_list: list[ParsedLog], no_learn: list[bool] | None = None) -> list[Analysis]:
         """Same as `analyze`, for a batch: templates are mined in order (Drain3 is sequential by nature), then ALL logs are scored
         with one Isolation Forest call. Per-call overhead dominates single-row scoring, so this is several times faster per log."""
         staged = []
-        for parsed in parsed_list:
+        for n, parsed in enumerate(parsed_list):
+            skip = bool(no_learn and no_learn[n])               # synthetic / test source: scored and tagged, but it teaches the model nothing
             text = parsed.message or parsed.original
-            mined = self.miner.mine(text)
+            mined = self.miner.peek(text) if skip else self.miner.mine(text)
             added = {k: v for k, v in map_to_ecs(mined).items() if k not in parsed.fields}
             parsed.fields.update(added)
-            staged.append((parsed, text, mined, added, self._features(parsed, mined, len(text)), self.miner.total > self.settle))
+            staged.append((parsed, text, mined, added, self._features(parsed, mined, len(text)), self.miner.total > self.settle and not skip))
         scores = self.scorer.score_many([s[4] for s in staged], [s[5] for s in staged])
         out = []
         for (parsed, text, mined, added, _feat, _learn), score in zip(staged, scores):

@@ -1,0 +1,36 @@
+{
+  "@timestamp": "2026-10-01T11:22:33+00:00",
+  "destination.ip": "10.0.5.10",
+  "destination.port": 3389,
+  "ecs.version": "8.11.0",
+  "event.action": "deny",
+  "event.category": [
+    "network"
+  ],
+  "event.code": "0000000013",
+  "event.dataset": "logunify.fortinet_fortigate",
+  "event.kind": "event",
+  "event.module": "fortinet",
+  "event.original": "<189>date=2026-10-01 time=11:22:33 devname=\"FG-HQ-01\" devid=\"FGT60F0000\" logid=\"0000000013\" type=\"traffic\" subtype=\"forward\" level=\"notice\" srcip=203.0.113.40 srcport=44123 srcintf=\"wan1\" dstip=10.0.5.10 dstport=3389 dstintf=\"lan\" proto=6 action=\"deny\" policyid=0 service=\"RDP\" app=\"Remote.Desktop\"",
+  "event.outcome": "failure",
+  "event.timezone": "UTC",
+  "event.type": [
+    "connection",
+    "denied"
+  ],
+  "labels.fortigate_subtype": "forward",
+  "labels.fortigate_type": "traffic",
+  "logunify.parser.name": "fortinet_fortigate",
+  "logunify.source_format": "fortinet_fortigate",
+  "message": "traffic/forward deny 203.0.113.40 -> 10.0.5.10",
+  "network.application": "Remote.Desktop",
+  "network.iana_number": "6",
+  "observer.egress.interface.name": "lan",
+  "observer.ingress.interface.name": "wan1",
+  "observer.name": "FG-HQ-01",
+  "observer.type": "firewall",
+  "observer.vendor": "Fortinet",
+  "rule.id": "0",
+  "source.ip": "203.0.113.40",
+  "source.port": 44123
+}

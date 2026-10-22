@@ -1,0 +1,39 @@
+# Microsoft Entra ID (Azure AD) sign-in log record, as exported through Event Hub / diagnostic settings (one record per line).
+name: azure_ad_signin
+version: "1.0.0"
+kind: json
+description: Microsoft Entra ID (Azure AD) sign-in log
+priority: 20
+sniff:
+  keys: [category, operationName, properties.userPrincipalName]
+  confidence: 0.98
+timestamp:
+  path: time
+message_path: operationName
+fields:
+  event.action:        {path: operationName}
+  event.id:            {path: properties.id}
+  event.reason:        {path: properties.status.failureReason}
+  user.name:           {path: properties.userPrincipalName}
+  user.id:             {path: properties.userId}
+  source.ip:           {path: properties.ipAddress, type: ip}
+  source.geo.city_name:    {path: properties.location.city}
+  source.geo.country_iso_code: {path: properties.location.countryOrRegion}
+  cloud.provider:      {value: azure}
+  cloud.account.id:    {path: tenantId}
+  labels.app:          {path: properties.appDisplayName}
+  labels.client_app:   {path: properties.clientAppUsed}
+  labels.conditional_access: {path: properties.conditionalAccessStatus}
+  labels.risk_level:   {path: properties.riskLevelDuringSignIn}
+  labels.error_code:   {path: properties.status.errorCode}
+rules:
+  - when: {field: properties.status.errorCode, equals: 0}
+    set: {event.outcome: success}
+  - when: {field: properties.status.errorCode, gt: 0}
+    set: {event.outcome: failure}
+static:
+  event.kind: event
+  event.category: [authentication]
+  event.type: [start]
+  event.module: azure
+  event.dataset: azure.signinlogs

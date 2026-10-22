@@ -1,0 +1,43 @@
+# PostgreSQL server log (stderr / logging_collector text format). REQUIRES log_line_prefix = '%m [%p] %q%u@%d ' (the Debian/Ubuntu default), i.e.
+#   2026-10-01 12:00:00.123 UTC [1234] app@appdb FATAL:  password authentication failed for user "app"
+# Sessions-less lines (checkpointer, postmaster) have no user@db part. `%m` carries a time-zone ABBREVIATION that is dropped here: the source's
+# timezone setting decides the zone (set it to the server's log_timezone). csvlog / jsonlog formats are not covered.
+name: postgresql_log
+version: "1.0.0"
+kind: regex
+description: PostgreSQL server log (stderr text, prefix '%m [%p] %q%u@%d ')
+priority: 15
+sniff:
+  regex: '^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+ \S+ \[\d+\] (?:\S*@\S* )?(?:LOG|ERROR|FATAL|PANIC|WARNING|NOTICE|STATEMENT|DETAIL|HINT|INFO|DEBUG\d?):  '
+  confidence: 0.95
+match:
+  regex: '^(?P<ts>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+) (?P<tz>\S+) \[(?P<pid>\d+)\] (?:(?P<user>[^@\s]*)@(?P<db>\S*) )?(?P<level>[A-Z]+\d?):  (?P<msg>.*)$'
+timestamp:
+  field: ts
+  format: "%Y-%m-%d %H:%M:%S.%f"
+message: "{level}: {msg}"
+fields:
+  process.pid:        {from: pid, type: int}
+  user.name:          {from: user, drop_if: ["", "[unknown]"]}
+  labels.db_name:     {from: db, drop_if: ["", "[unknown]"]}
+  log.level:          {from: level, transform: lower}
+  labels.log_time_zone: {from: tz}
+rules:                                  # applied in order, later rules win: general first, specific last
+  - when: {field: level, in: [ERROR, FATAL, PANIC]}
+    set: {event.type: [error]}
+  - when: {field: msg, regex: '^(?:connection received|disconnection)'}
+    set: {event.category: [database], event.type: [connection]}
+  - when: {field: msg, regex: '^statement:|^execute |^duration:'}
+    set: {event.category: [database], event.type: [access]}
+  - when: {field: msg, regex: '(?i)^statement: (?:CREATE|ALTER|DROP) (?:ROLE|USER)\b|^statement: (?:GRANT|REVOKE)\b'}
+    set: {event.category: [iam, database], event.type: [change], event.action: privilege-or-role-change}
+  - when: {field: msg, regex: '^connection authorized'}
+    set: {event.category: [authentication, database], event.type: [start, allowed], event.outcome: success, event.action: connection-authorized}
+  - when: {field: msg, regex: '^(?:password |peer |ident |md5 |SCRAM |GSS )?authentication failed|^no pg_hba\.conf entry|^role ".*" does not exist'}
+    set: {event.category: [authentication, database], event.type: [start, denied], event.outcome: failure, event.action: authentication-failed}
+static:
+  event.kind: event
+  event.category: [database]
+  event.type: [info]
+  event.module: postgresql
+  event.dataset: postgresql.log

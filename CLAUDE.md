@@ -29,16 +29,17 @@ logunify-dashboard (Next.js) ──► SOC console over the backend API (proxied
 
 | Path | Contents |
 |---|---|
-| `logunify-backend/app/` | `parsers/` (syslog, json, cef, text, detect) · `ecs/normalizer.py` · `pipeline/` (bus: memory/Kafka, processor, metrics) · `intel/` (Drain3, anomaly, mitre rules, ecs_mapper) · `enrich/geoip.py` · `threatintel/` (store, misp, service) · `integrity/` (merkle, batcher, ledger, cli) · `alerting/` (rules, cert_in report, manager, notifiers, store) · `api/` · `sources.py` · `mock/generators.py` · `pipeline/` also has `envelope.py` (event.id/hash), `dlq.py`, `stream.py` (SSE) · `archive/` (encrypted raw archive) · `parsers/sdk.py` + `builtin/*.yaml` (parser SDK) · `ecs/taxonomy.py` + `validate.py` · `forwarding/` (async ES Bulk forwarder) · `state/` (aiosqlite persistence) · `listeners/` (syslog UDP/TCP) · `privacy/` (PII redaction) · `security/` (JWT, RBAC guard, hash-chained audit) · `compliance/` (retention proof, PCI/HIPAA/ISO/CERT-In mapping, PDF) · `config.py` (all settings `LOGUNIFY_*`) |
+| `logunify-backend/app/` | `parsers/` (syslog, json, cef, text, detect) · `ecs/normalizer.py` · `pipeline/` (bus: memory/Kafka, processor, metrics) · `intel/` (Drain3, anomaly, mitre rules, ecs_mapper) · `enrich/geoip.py` · `threatintel/` (store, misp, service) · `integrity/` (merkle, batcher, ledger, cli) · `alerting/` (rules, calibration, cert_in report, manager, notifiers incl. Slack/Teams, store incl. saved searches) · `search.py` · `api/` · `sources.py` · `mock/generators.py` · `pipeline/` also has `envelope.py` (event.id/hash), `dlq.py`, `stream.py` (SSE) · `archive/` (encrypted raw archive) · `parsers/sdk.py` + `builtin/*.yaml` (parser SDK) · `ecs/taxonomy.py` + `validate.py` · `forwarding/` (async ES Bulk forwarder) · `state/` (aiosqlite persistence) · `listeners/` (syslog UDP/TCP) · `privacy/` (PII redaction) · `security/` (JWT, RBAC guard, hash-chained audit) · `compliance/` (retention proof, PCI/HIPAA/ISO/CERT-In mapping, PDF) · `config.py` (all settings `LOGUNIFY_*`) |
 | `logunify-backend/docs/ALERTING.md` | CERT-In 6-hour workflow, field map, calibration, runbook |
 | `logunify-backend/docs/PIPELINE.md` | envelope/traceability, no-loss delivery, parser SDK, taxonomy, throughput numbers, scale-out |
 | `deploy/`, `compose.yaml`, `.github/workflows/ci.yml` | containers (backend/dashboard/kafka stack built + smoke-tested, CI green on GitHub; flink/vector images not built), hash-pinned locks, offline bundle, `deploy/smoke_test.py` |
 | `logunify-backend/docs/CONFIGURATION.md` | where every secret comes from (env vars / secret files), generation and rotation |
 | `logunify-backend/docs/FORWARDING.md` | Python ES Bulk forwarder: guarantees, retry table, dead-letter, verification status |
 | `logunify-backend/docs/STATE.md` | what is persisted, flush design, failure behaviour, limits |
+| `logunify-backend/docs/WINDOWS_SECURITY.md` | onboarding the Windows Security log: NXLog, audit policy, source setup, sizing (measured), calibration routine |
 | `logunify-backend/docs/SECURITY.md` | PII redaction, RBAC, audit log, compliance report: behaviour and limits |
 | `logunify-backend/scripts/` | `alert_threshold_survey.py`, `dev_alert_sink.py` |
-| `logunify-dashboard/` | `app/`, `components/` (MetricCards, LogStream, SourceConfigurator, SourceList, IntegrityVerifier, Badges), `lib/` (api, types, usePoll, format) |
+| `logunify-dashboard/` | `app/`, `components/` (MetricCards, LogStream, SourceConfigurator, SourceList, IntegrityVerifier, Badges, AlertsView, SearchView, CalibrationView), `lib/` (api, types, usePoll, format) |
 | `logunify-flink/` | `logunify_flink/` (job, functions, noise, fingerprint, codec, config, pyenv, testing) · `jars/` (Kafka connector, zstd-jni) · `scripts/` (e2e, consume_siem) · `tools/` (Kafka 3.9.1, gitignored) |
 | `logunify-forwarder/` | `vector/vector.d/` (00-common, 05-dlq, 10-elasticsearch, 20-splunk-hec, 30-wazuh-file) · `elasticsearch/` (ILM, template, SLM, role, setup.py) · `splunk/` · `wazuh/` · `retention/` (policy_lint, capacity) · `scripts/` (mock_receivers, e2e) · `docs/WORKFLOW.md` · `tools/` (Vector, gitignored) |
 
@@ -49,10 +50,12 @@ logunify-dashboard (Next.js) ──► SOC console over the backend API (proxied
 cd logunify-backend && python -m uvicorn app.main:app
 python -m app.parsers.cli test --strict                     # parser golden-fixture contract (CI gate)
 python scripts/bench_pipeline.py                            # one-core throughput
-python -m pytest tests -q                                   # 354 tests (+3 real-Kafka tests: -m kafka, ~2 min, needs Java + a Kafka distribution)
+python -m pytest tests -q                                   # 413 tests (+3 real-Kafka tests: -m kafka, ~2 min, needs Java + a Kafka distribution)
+python scripts/mutation_test.py --target app/privacy/pii.py --tests tests/test_pii.py --sample 40   # sampled mutation check (CI gate 80%)
+python scripts/bench_pipeline.py --min-eps 300              # throughput regression gate
 
 # dashboard (port 3000); Node is at "C:\Program Files\nodejs"
-cd logunify-dashboard && npm run dev        # npm run build · npm run typecheck
+cd logunify-dashboard && npm run dev        # npm run build · npm run typecheck · npm run e2e (Playwright + axe; build first)
 
 # flink: the Python 3.11 venv MUST be first on PATH (Flink launches workers as `python`; venv path has a space)
 cd logunify-flink && export PATH="$(cygpath "$(pwd -W)/.venv/Scripts"):$PATH"
@@ -67,12 +70,12 @@ python retention/capacity.py --eps 500
 
 ## Development goals (open, in priority order)
 
-1. **Calibrate the alert threshold**: at 0.9 nothing fires (0 alerts / 58k logs; 0.80 → 6). Use `alert_threshold_survey.py` on real traffic.
+1. **Calibrate the alert threshold**: at 0.9 nothing fires (0 alerts / 58k logs; 0.80 → 6). Use the dashboard `/calibration` view (replay + analyst feedback; `docs/ALERTING.md`) or `alert_threshold_survey.py` on real traffic.
 2. **Real IdP**: RBAC + audit exist (HS256 JWT, `LOGUNIFY_AUTH_MODE=jwt`; default `off` = open). Still to do: RS256/JWKS (Keycloak/Entra), mTLS, run the live ILM check against a real cluster.
-3. **Remaining deployment work:** build/run the Flink + Vector images, Helm chart, one shared state store for multi-worker. Flink output (`logunify.siem`) has no consumer yet.
+3. **Remaining deployment work:** build/run the Flink + Vector images, Helm chart. Done: PostgreSQL state backend (schema per replica), signed Drain3/IF persistence, Redis-shared rate limit. Still open: logically shared sources/batches across replicas, Postgres for alerts/audit/revocations, Redis for the lockout limiter. Flink output (`logunify.siem`) has no consumer yet.
 3b. **Replace placeholders**: MaxMind GeoIP, live MISP, real Hyperledger Fabric gateway (`submit_anchor`/`get_anchor`), validated ATT&CK analytics.
 4. **Validate lifecycle policies on real clusters** (ES ILM, Splunk indexes.conf, Wazuh rules via `wazuh-logtest`, ISM); size with `capacity.py`.
-5. **Persistence**: sources, IOC feeds, batches, anchors, recent logs now persist (`state/`, aiosqlite, `docs/STATE.md`). Still in memory: Drain3 templates, Isolation Forest, TI hit history, metrics. Single-process only.
+5. **Persistence**: sources, IOC feeds, batches, anchors, recent logs now persist (`state/`, aiosqlite, `docs/STATE.md`). Models (Drain3 templates, IF window) persist when an HMAC key is set. Still in memory: TI hit history, metrics. One writer per file/schema.
 6. **API-pull listeners** (stored as config only). Syslog UDP/TCP listeners exist (`listeners/`, no TLS/RFC 5425); HTTP push works.
 7. Dashboard: push (SSE/WebSocket) instead of 2 s polling; alerts view.
 

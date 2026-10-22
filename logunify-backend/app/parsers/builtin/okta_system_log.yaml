@@ -1,0 +1,46 @@
+# Okta System Log event (one JSON object per line; the /api/v1/logs response unwrapped to one event per line).
+name: okta_system_log
+version: "1.0.0"
+kind: json
+description: Okta System Log event
+priority: 20
+sniff:
+  keys: [eventType, actor.alternateId, outcome.result]
+  confidence: 0.98
+timestamp:
+  path: published
+message_path: displayMessage
+fields:
+  event.action:        {path: eventType}
+  event.id:            {path: uuid}
+  event.reason:        {path: outcome.reason}
+  user.name:           {path: actor.alternateId}
+  user.full_name:      {path: actor.displayName}
+  user.id:             {path: actor.id}
+  source.ip:           {path: client.ipAddress, type: ip}
+  user_agent.original: {path: client.userAgent.rawUserAgent}
+  source.geo.city_name:    {path: client.geographicalContext.city}
+  source.geo.country_name: {path: client.geographicalContext.country}
+  labels.okta_severity:    {path: severity}
+  labels.okta_target:      {path: target.0.alternateId}
+rules:
+  - when: {field: outcome.result, in: [SUCCESS, ALLOW]}
+    set: {event.outcome: success}
+  - when: {field: outcome.result, in: [FAILURE, DENY]}
+    set: {event.outcome: failure}
+  - when: {field: eventType, regex: '^user\.session\.start'}
+    set: {event.category: [authentication], event.type: [start]}
+  - when: {field: eventType, regex: '^user\.authentication\.'}
+    set: {event.category: [authentication]}
+  - when: {field: eventType, regex: '^user\.mfa\.|^user\.account\.(?:update_password|reset_password)'}
+    set: {event.category: [authentication, iam], event.type: [change]}
+  - when: {field: eventType, regex: '^(?:user\.lifecycle|group\.user_membership|application\.user_membership)'}
+    set: {event.category: [iam], event.type: [change]}
+  - when: {field: eventType, regex: '^policy\.'}
+    set: {event.category: [configuration], event.type: [change]}
+static:
+  event.kind: event
+  event.module: okta
+  event.dataset: okta.system
+  event.category: [authentication]
+  event.type: [info]

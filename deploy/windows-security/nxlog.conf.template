@@ -1,0 +1,46 @@
+## LogUnify forwarder: Windows Security (+ log-cleared / service-install) events -> LogUnify as newline-delimited JSON over TCP (optionally TLS).
+## Rendered by Install-LogUnifyForwarder.ps1 (replaces the @@TOKENS@@). Based on NXLog's documentation; NOT tested by the author on a live NXLog.
+## Only the event IDs LogUnify's windows_security parser maps are collected: do not widen the list without a reason (volume).
+
+define ROOT     C:\Program Files\nxlog
+Moduledir       %ROOT%\modules
+CacheDir        %ROOT%\data
+Pidfile         %ROOT%\data\nxlog.pid
+SpoolDir        %ROOT%\data
+LogFile         %ROOT%\data\nxlog.log
+
+<Extension _json>
+    Module  xm_json
+</Extension>
+
+<Input eventlog>
+    Module  im_msvistalog
+    SavePos TRUE                      # resume where it stopped after a restart: no gap, no duplicates
+    <QueryXML>
+      <QueryList>
+        <Query Id="0">
+          <Select Path="Security">*[System[(EventID=1102 or EventID=4624 or EventID=4625 or EventID=4634 or EventID=4647 or
+            EventID=4648 or EventID=4672 or EventID=4688 or EventID=4697 or EventID=4719 or EventID=4720 or EventID=4726 or
+            EventID=4728 or EventID=4732 or EventID=4740 or EventID=4756)]]</Select>
+          <Select Path="System">*[System[(EventID=104 or EventID=7045)]]</Select>
+        </Query>
+      </QueryList>
+    </QueryXML>
+    Exec    to_json();                # EventTime stays in the host's LOCAL time (the LogUnify source carries the time zone)
+</Input>
+
+## Disk buffer: if LogUnify (or the network) is down, events wait here instead of being lost. Sizes are KB.
+<Processor buffer>
+    Module      pm_buffer
+    Type        Disk
+    MaxSize     1048576
+    WarnLimit   524288
+</Processor>
+
+<Output logunify>
+@@OUTPUT_MODULE@@
+</Output>
+
+<Route security_to_logunify>
+    Path    eventlog => buffer => logunify
+</Route>

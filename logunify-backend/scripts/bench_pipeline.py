@@ -46,15 +46,18 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=20000)
     ap.add_argument("--chunk", type=int, default=32)
+    ap.add_argument("--min-eps", type=float, default=0, help="exit 1 if the full pipeline is slower than this (regression gate)")
     a = ap.parse_args()
     random.seed(1)
     lines = [random.choice((gen_syslog, gen_json, gen_cef))().encode() for _ in range(a.n)]
     print(f"{a.n} mixed syslog/JSON/CEF logs, chunk={a.chunk}, python {sys.version.split()[0]}")
-    run("full pipeline (defaults)", lines, a.chunk)
+    full = run("full pipeline (defaults)", lines, a.chunk)
     run("  batch size 1 (the old per-log path)", lines, 1)
     run("  ML scoring off", lines, a.chunk, intel_enabled=False)
     run("  ML + threat intel + alerting off", lines, a.chunk, intel_enabled=False, ti_enabled=False, alerting_enabled=False)
     run("  PII redaction off", lines, a.chunk, pii_enabled=False)
+    if full < a.min_eps:
+        sys.exit(f"REGRESSION: full pipeline {full:.0f} events/s < gate {a.min_eps:.0f}")
 
 
 if __name__ == "__main__":

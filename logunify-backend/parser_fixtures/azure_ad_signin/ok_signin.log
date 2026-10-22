@@ -1,0 +1,1 @@
+{"time":"2026-10-01T07:21:00Z","tenantId":"11111111-2222-3333-4444-555555555555","operationName":"Sign-in activity","category":"SignInLogs","properties":{"id":"abc-124","userPrincipalName":"asmith@example.com","ipAddress":"10.9.8.7","appDisplayName":"Teams","status":{"errorCode":0}}}

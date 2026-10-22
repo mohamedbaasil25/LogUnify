@@ -24,8 +24,14 @@ def require_key(request: Request, x_api_key: str = Header(default="")) -> None:
     key = s.alert_api_key
     if key is None:
         raise HTTPException(503, "Alert API is disabled: set LOGUNIFY_ALERT_API_KEY to enable it")
+    h = request.app.state.hardening
+    lk = ("apikey", h.client_ip(request))
+    if (left := h.keys.locked(lk)):                           # brute-force guard: locked even for the right key until it expires
+        raise HTTPException(429, "Too many failed attempts", headers={"Retry-After": str(int(left) + 1)})
     if not hmac.compare_digest(x_api_key.encode("utf-8"), key.get_secret_value().encode("utf-8")):
+        h.keys.fail(lk)
         raise HTTPException(401, "Invalid or missing X-API-Key", headers={"WWW-Authenticate": "ApiKey"})
+    h.keys.success(lk)
 
 
 def get_manager(p: Pipeline = Depends(get_pipeline)) -> AlertManager:
@@ -46,6 +52,15 @@ class Actor(BaseModel):
 
 class AckBody(Actor):
     note: str = Field("", max_length=1000)
+
+
+class AssignBody(Actor):
+    to: str | None = Field(None, max_length=100, description="Assignee (username or email address); null/empty clears the owner")
+    note: str = Field("", max_length=1000)
+
+
+class NoteBody(Actor):
+    text: str = Field(min_length=1, max_length=4000)
 
 
 class ReportedBody(Actor):
@@ -96,6 +111,12 @@ def _call(fn, *args, **kwargs):
         raise HTTPException(422, str(e)) from None
 
 
+@router.get("/reference/annexure")
+def annexure():
+    """CERT-In Annexure I incident types (id -> label): the choices for the incident-type field of the report."""
+    return {"items": [{"id": k, "label": v} for k, v in cert_in.ANNEXURE_I.items()]}
+
+
 @router.get("/config")
 def config(m: AlertManager = Depends(get_manager)):
     """Effective alerting configuration (no secrets)."""
@@ -112,9 +133,10 @@ async def test_channels(m: AlertManager = Depends(get_manager)):
 
 @router.get("")
 def list_alerts(status: Literal["active", "open", "acknowledged", "reported", "closed"] | None = None,
+                assignee: str | None = Query(None, max_length=100, description="a name, or `unassigned`"),
                 limit: int = Query(50, ge=1, le=500), m: AlertManager = Depends(get_manager)):
     """Newest first. `active` = open + acknowledged = the CERT-In clock is running and nothing has been reported."""
-    return {"items": m.list_alerts(status, limit)}
+    return {"items": m.list_alerts(status, limit, assignee)}
 
 
 @router.get("/{alert_id}")
@@ -142,6 +164,24 @@ def evidence(alert_id: str, m: AlertManager = Depends(get_manager)):
 def events(alert_id: str, m: AlertManager = Depends(get_manager)):
     """Append-only audit trail: creation, each notification attempt, reminders, acknowledgement, report, closure."""
     return {"items": _call(m.events_for, alert_id)}
+
+
+@router.post("/{alert_id}/assign")
+def assign(alert_id: str, body: AssignBody, request: Request, m: AlertManager = Depends(get_manager)):
+    """Set (or clear) who is investigating. The channels are told; the CERT-In clock and status are unchanged."""
+    _call(m.assign, alert_id, body.by, body.to, body.note, _client(request))
+    return m.view(alert_id)
+
+
+@router.get("/{alert_id}/notes")
+def list_notes(alert_id: str, m: AlertManager = Depends(get_manager)):
+    return {"items": _call(m.notes_for, alert_id)}
+
+
+@router.post("/{alert_id}/notes", status_code=201)
+def add_note(alert_id: str, body: NoteBody, request: Request, m: AlertManager = Depends(get_manager)):
+    """Append-only investigation note (cannot be edited or deleted; also allowed after the alert is closed)."""
+    return _call(m.add_note, alert_id, body.by, body.text, _client(request))
 
 
 @router.post("/{alert_id}/ack")

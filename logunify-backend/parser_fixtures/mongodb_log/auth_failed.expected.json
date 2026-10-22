@@ -1,0 +1,31 @@
+{
+  "@timestamp": "2026-10-01T12:00:00.123000+00:00",
+  "ecs.version": "8.11.0",
+  "event.action": "authentication-failed",
+  "event.category": [
+    "authentication",
+    "database"
+  ],
+  "event.code": 20249,
+  "event.dataset": "logunify.mongodb_log",
+  "event.kind": "event",
+  "event.module": "mongodb",
+  "event.original": "{\"t\":{\"$date\":\"2026-10-01T12:00:00.123+00:00\"},\"s\":\"I\",\"c\":\"ACCESS\",\"id\":20249,\"ctx\":\"conn12\",\"msg\":\"Authentication failed\",\"attr\":{\"mechanism\":\"SCRAM-SHA-256\",\"principalName\":\"bob\",\"authenticationDatabase\":\"admin\",\"remote\":\"203.0.113.9:51234\",\"result\":18}}",
+  "event.outcome": "failure",
+  "event.severity": 6,
+  "event.type": [
+    "start",
+    "denied"
+  ],
+  "labels.auth_db": "admin",
+  "labels.auth_mechanism": "SCRAM-SHA-256",
+  "labels.mongo_component": "ACCESS",
+  "labels.mongo_context": "conn12",
+  "log.level": "info",
+  "logunify.parser.name": "mongodb_log",
+  "logunify.source_format": "mongodb_log",
+  "message": "Authentication failed",
+  "source.ip": "203.0.113.9",
+  "source.port": 51234,
+  "user.name": "bob"
+}

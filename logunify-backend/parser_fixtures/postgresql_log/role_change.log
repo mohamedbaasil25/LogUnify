@@ -1,0 +1,1 @@
+2026-10-01 12:05:10.456 UTC [1301] dba@postgres LOG:  statement: GRANT ALL PRIVILEGES ON DATABASE appdb TO newuser;
